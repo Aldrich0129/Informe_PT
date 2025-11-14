@@ -114,9 +114,9 @@ class TableBuilder:
             rows = []
             for row_cfg in cfg.get("rows", []):
                 row_id = row_cfg["id"]
-                row_data = {"label": data.get("nombre_operacion", f"Operación {n}")}
+                row_data = {"label": row_id}  # Usar el row_id como label
 
-                # Obtener valores de las columnas
+                # Obtener valores de las columnas (incluye nombre_operacion)
                 for col in cfg.get("columns", []):
                     col_id = col["id"]
                     value = data.get(col_id, "")

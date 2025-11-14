@@ -50,6 +50,10 @@ tables:
         min: 1
         max: 10          # se puede ampliar si hay más operaciones
     columns:
+      - id: nombre_operacion
+        header: "Operación"
+        type: "text"
+        editable: true
       - id: min
         header: "Min"
         type: "percent"

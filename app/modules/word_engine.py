@@ -265,6 +265,9 @@ class WordEngine:
         alternate_rows = format_config.get("alternate_rows", False)
         alternate_row_color = format_config.get("alternate_row_color", "#F2F2F2")
         border_color = format_config.get("border_color", "#000000")
+        first_column_bold = format_config.get("first_column_bold", False)
+        first_column_bg_color = format_config.get("first_column_bg_color", None)
+        first_column_text_color = format_config.get("first_column_text_color", None)
 
         # Aplicar bordes personalizados a toda la tabla si show_borders es True
         if show_borders:
@@ -316,10 +319,24 @@ class WordEngine:
 
                 cell.text = formatted_value
 
+                # Aplicar estilo de primera columna si está configurado y es la primera columna
+                is_first_column = (j == 0)
+                if is_first_column:
+                    # Aplicar color de fondo si está configurado
+                    if first_column_bg_color:
+                        self._apply_cell_shading(cell, first_column_bg_color)
+
                 # Aplicar tamaño de fuente a las celdas de datos
                 for paragraph in cell.paragraphs:
                     for run in paragraph.runs:
                         run.font.size = Pt(data_font_size)
+
+                        # Aplicar estilos de primera columna
+                        if is_first_column:
+                            if first_column_bold:
+                                run.bold = True
+                            if first_column_text_color:
+                                run.font.color.rgb = self._hex_to_rgb(first_column_text_color)
 
         # Llenar filas de footer
         if footer_rows:

@@ -90,6 +90,63 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
         st.divider()
         st.markdown("**Desarrollado con Streamlit + Python-docx**")
 
+    # Aplicar datos cargados desde JSON a las keys de los widgets
+    if st.session_state.get("data_loaded", False):
+        # Copiar variables simples a las keys de los widgets
+        if "loaded_simple_inputs" in st.session_state:
+            for key, value in st.session_state.loaded_simple_inputs.items():
+                st.session_state[f"simple_{key}"] = value
+
+        # Copiar inputs de condiciones
+        if "loaded_condition_inputs" in st.session_state:
+            for key, value in st.session_state.loaded_condition_inputs.items():
+                st.session_state[f"cond_{key}"] = value
+
+        # Copiar configuración de formato de tabla
+        if "loaded_table_format" in st.session_state:
+            st.session_state.table_format = st.session_state.loaded_table_format
+
+        # Copiar inputs de tablas
+        if "loaded_table_inputs" in st.session_state:
+            for table_key, table_data in st.session_state.loaded_table_inputs.items():
+                # Para cada tabla, guardar sus datos en session_state
+                st.session_state[f"table_{table_key}"] = table_data
+
+                # Para las operaciones vinculadas, también necesitamos copiar cada campo
+                if table_key == "operaciones_vinculadas":
+                    # table_data es una lista de operaciones
+                    if isinstance(table_data, list):
+                        for i, op in enumerate(table_data):
+                            st.session_state[f"op_{i}_tipo"] = op.get("tipo_operacion", "")
+                            st.session_state[f"op_{i}_entidad"] = op.get("entidad_vinculada", "")
+                            st.session_state[f"op_{i}_ingreso"] = op.get("ingreso_local_file", 0.0)
+                            st.session_state[f"op_{i}_gasto"] = op.get("gasto_local_file", 0.0)
+                        st.session_state.num_operaciones = len(table_data)
+
+                # Para análisis indirecto global (TNMM)
+                elif table_key == "analisis_indirecto_global":
+                    if "rango_tnmm" in table_data:
+                        rango = table_data["rango_tnmm"]
+                        st.session_state["tnmm_global_min"] = rango.get("min", 1.0)
+                        st.session_state["tnmm_global_lq"] = rango.get("lq", 2.0)
+                        st.session_state["tnmm_global_med"] = rango.get("med", 3.0)
+                        st.session_state["tnmm_global_uq"] = rango.get("uq", 4.0)
+                        st.session_state["tnmm_global_max"] = rango.get("max", 5.0)
+
+                # Para análisis indirecto por operación (TNMM por operación)
+                elif table_key.startswith("analisis_indirecto_operacion_"):
+                    # Extraer el número de operación
+                    n = table_key.split("_")[-1]
+                    # Las keys son tnmm_op_{n}_{col_id}
+                    st.session_state[f"tnmm_op_{n}_min"] = table_data.get("min", 1.0)
+                    st.session_state[f"tnmm_op_{n}_lq"] = table_data.get("lq", 2.0)
+                    st.session_state[f"tnmm_op_{n}_med"] = table_data.get("med", 3.0)
+                    st.session_state[f"tnmm_op_{n}_uq"] = table_data.get("uq", 4.0)
+                    st.session_state[f"tnmm_op_{n}_max"] = table_data.get("max", 5.0)
+
+        # Resetear bandera para no repetir el proceso
+        st.session_state.data_loaded = False
+
     # Usar pestañas para organizar las secciones (Tablas antes de Condiciones)
     tabs = st.tabs(["📝 Variables Simples", "📊 Tablas", "🎨 Formato de Tablas", "🔀 Condiciones"])
 

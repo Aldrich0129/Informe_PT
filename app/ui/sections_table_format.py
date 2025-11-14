@@ -27,7 +27,10 @@ def render_table_format_section() -> dict:
             "header_font_size": 11,
             "data_font_size": 10,
             "alternate_rows": False,
-            "alternate_row_color": "#F2F2F2"
+            "alternate_row_color": "#F2F2F2",
+            "first_column_bold": False,
+            "first_column_bg_color": None,
+            "first_column_text_color": None
         }
 
     format_config = {}
@@ -163,6 +166,57 @@ def render_table_format_section() -> dict:
     else:
         format_config["alternate_row_color"] = None
 
+    # Sección de primera columna
+    st.subheader("Formato de Primera Columna")
+    st.markdown("Configura el estilo de las celdas de la primera columna (excluyendo el encabezado)")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        first_column_bold = st.checkbox(
+            "Texto en negrita",
+            value=st.session_state.table_format.get("first_column_bold", False),
+            key="format_first_column_bold",
+            help="Aplicar negrita al texto de la primera columna"
+        )
+        format_config["first_column_bold"] = first_column_bold
+
+    with col2:
+        use_first_col_bg = st.checkbox(
+            "Color de fondo personalizado",
+            value=st.session_state.table_format.get("first_column_bg_color") is not None,
+            key="use_first_col_bg",
+            help="Activar color de fondo personalizado para la primera columna"
+        )
+        if use_first_col_bg:
+            first_column_bg_color = st.color_picker(
+                "Color de fondo",
+                value=st.session_state.table_format.get("first_column_bg_color", "#E7E6E6"),
+                key="format_first_column_bg_color",
+                help="Color de fondo de la primera columna"
+            )
+            format_config["first_column_bg_color"] = first_column_bg_color
+        else:
+            format_config["first_column_bg_color"] = None
+
+    with col3:
+        use_first_col_text = st.checkbox(
+            "Color de texto personalizado",
+            value=st.session_state.table_format.get("first_column_text_color") is not None,
+            key="use_first_col_text",
+            help="Activar color de texto personalizado para la primera columna"
+        )
+        if use_first_col_text:
+            first_column_text_color = st.color_picker(
+                "Color de texto",
+                value=st.session_state.table_format.get("first_column_text_color", "#000000"),
+                key="format_first_column_text_color",
+                help="Color de texto de la primera columna"
+            )
+            format_config["first_column_text_color"] = first_column_text_color
+        else:
+            format_config["first_column_text_color"] = None
+
     # Botón para restablecer valores por defecto
     st.divider()
     if st.button("🔄 Restablecer valores por defecto"):
@@ -176,7 +230,10 @@ def render_table_format_section() -> dict:
             "header_font_size": 11,
             "data_font_size": 10,
             "alternate_rows": False,
-            "alternate_row_color": "#F2F2F2"
+            "alternate_row_color": "#F2F2F2",
+            "first_column_bold": False,
+            "first_column_bg_color": None,
+            "first_column_text_color": None
         }
         st.rerun()
 
