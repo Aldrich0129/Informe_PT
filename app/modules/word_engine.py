@@ -619,12 +619,14 @@ class WordEngine:
 
     def process_table_of_contents(self):
         """
-        Procesa el índice (tabla de contenidos) del documento.
+        Procesa el índice (tabla de contenidos) del documento usando marcadores numéricos.
 
-        Busca contenidos entre <<Indice>> y <<fin Indice>>, localiza cada título
-        en el documento, calcula el número de página y actualiza el índice.
+        Busca contenidos entre <<Indice>> y <<fin Indice>>, extrae los marcadores numéricos
+        (<<1>>, <<2>>, etc.) de cada entrada del índice, localiza estos marcadores en el
+        documento, inserta saltos de página antes de ellos, calcula los números de página
+        y actualiza el índice.
 
-        El índice siempre empezará en una nueva página.
+        Al finalizar, elimina todos los marcadores numéricos del documento.
         """
         # Buscar los marcadores de inicio y fin del índice
         toc_start_idx = None
@@ -642,46 +644,79 @@ class WordEngine:
         if toc_start_idx is None or toc_end_idx is None:
             return
 
-        # Extraer los títulos del índice (entre los marcadores)
-        toc_titles = []
-        toc_paragraphs = []
+        # Extraer las entradas del índice con sus marcadores numéricos
+        toc_entries = []  # Lista de {paragraph, title, marker}
+
+        marker_pattern = re.compile(r'<<(\d+)>>')
 
         for i in range(toc_start_idx + 1, toc_end_idx):
             para = self.doc.paragraphs[i]
-            title = para.text.strip()
+            text = para.text.strip()
 
-            if title:  # Solo procesar párrafos no vacíos
-                toc_titles.append(title)
-                toc_paragraphs.append(para)
+            if text:  # Solo procesar párrafos no vacíos
+                # Buscar el marcador numérico en el texto
+                match = marker_pattern.search(text)
+                if match:
+                    marker_num = match.group(1)
+                    marker = f"<<{marker_num}>>"
 
-        # Buscar cada título en el documento y calcular su número de página
-        # Crear un mapa de títulos a números de página
-        title_to_page = {}
+                    # Extraer el título (texto antes del marcador)
+                    title = marker_pattern.sub('', text).strip()
 
-        for title in toc_titles:
-            page_num = self._find_title_page_number(title, toc_end_idx)
+                    toc_entries.append({
+                        'paragraph': para,
+                        'title': title,
+                        'marker': marker,
+                        'marker_num': marker_num
+                    })
+
+        # Si no hay entradas con marcadores, salir
+        if not toc_entries:
+            # Limpiar solo los marcadores de inicio y fin
+            start_para = self.doc.paragraphs[toc_start_idx]
+            start_para.text = start_para.text.replace("<<Indice>>", "").strip()
+            end_para = self.doc.paragraphs[toc_end_idx]
+            end_para.text = end_para.text.replace("<<fin Indice>>", "").strip()
+            return
+
+        # Fase 1: Buscar cada marcador en el documento e insertar saltos de página
+        for entry in toc_entries:
+            marker = entry['marker']
+            self._insert_page_break_before_marker(marker, toc_end_idx)
+
+        # Fase 2: Calcular números de página para cada marcador
+        marker_to_page = {}
+
+        for entry in toc_entries:
+            marker = entry['marker']
+            page_num = self._find_marker_page_number(marker, toc_end_idx)
             if page_num is not None:
-                title_to_page[title] = page_num
+                marker_to_page[marker] = page_num
 
-        # Actualizar el índice con los números de página
-        for i, para in enumerate(toc_paragraphs):
-            title = toc_titles[i]
+        # Fase 3: Actualizar el índice con los números de página
+        for entry in toc_entries:
+            para = entry['paragraph']
+            title = entry['title']
+            marker = entry['marker']
 
-            if title in title_to_page:
-                page_num = title_to_page[title]
+            if marker in marker_to_page:
+                page_num = marker_to_page[marker]
 
-                # Actualizar el texto del párrafo para incluir el número de página
-                # Formato: "Título .................................................. Página"
                 # Eliminar cualquier número de página existente al final
                 clean_title = re.sub(r'[\.\s]+\d+$', '', title).strip()
 
-                # Calcular el número de puntos necesarios (longitud aproximada)
-                # Longitud típica de una línea: ~80 caracteres
+                # Calcular el número de puntos necesarios
                 dots_length = max(3, 80 - len(clean_title) - len(str(page_num)) - 2)
                 dots = '.' * dots_length
 
-                # Actualizar el párrafo
+                # Actualizar el párrafo (sin el marcador)
                 para.text = f"{clean_title} {dots} {page_num}"
+            else:
+                # Si no se encontró el marcador, al menos limpiar el marcador del título
+                para.text = title
+
+        # Fase 4: Eliminar todos los marcadores numéricos del documento
+        self._remove_numeric_markers()
 
         # Eliminar el marcador <<Indice>>
         start_para = self.doc.paragraphs[toc_start_idx]
@@ -692,58 +727,110 @@ class WordEngine:
         end_para.text = end_para.text.replace("<<fin Indice>>", "").strip()
 
         # Asegurar que el índice empiece en una nueva página
-        # Insertar un salto de página antes del índice
         if toc_start_idx > 0:
-            # Obtener el párrafo antes del índice
             prev_para = self.doc.paragraphs[toc_start_idx - 1]
-
-            # Añadir un salto de página al final del párrafo anterior
             run = prev_para.add_run()
             run.add_break(WD_BREAK.PAGE)
 
-    def _find_title_page_number(self, title: str, start_search_idx: int) -> Optional[int]:
+    def _insert_page_break_before_marker(self, marker: str, toc_end_idx: int):
         """
-        Encuentra el número de página donde aparece un título en el documento.
-
-        Los títulos siempre empiezan en la primera línea de una nueva página.
+        Busca un marcador numérico en el documento e inserta un salto de página antes de él.
 
         Args:
-            title: Título a buscar
+            marker: Marcador numérico a buscar (ej: "<<1>>")
+            toc_end_idx: Índice del final del índice (para empezar búsqueda después)
+        """
+        # Buscar el marcador en el documento (después del índice)
+        for i in range(toc_end_idx + 1, len(self.doc.paragraphs)):
+            para = self.doc.paragraphs[i]
+
+            if marker in para.text:
+                # Verificar si este párrafo ya tiene un salto de página al inicio
+                has_page_break = False
+                if para.runs:
+                    for run in para.runs:
+                        if self._has_page_break(run):
+                            has_page_break = True
+                            break
+
+                # Si no tiene salto de página, insertar uno al principio del párrafo
+                if not has_page_break:
+                    # Insertar un salto de página al principio del párrafo
+                    # Crear un nuevo run al principio
+                    if para.runs:
+                        first_run = para.runs[0]
+                        # Insertar el salto de página en el primer run
+                        first_run.add_break(WD_BREAK.PAGE)
+                    else:
+                        # Si no hay runs, crear uno nuevo
+                        run = para.add_run()
+                        run.add_break(WD_BREAK.PAGE)
+
+                # Solo procesar la primera ocurrencia
+                break
+
+    def _find_marker_page_number(self, marker: str, start_search_idx: int) -> Optional[int]:
+        """
+        Encuentra el número de página donde aparece un marcador numérico.
+
+        Args:
+            marker: Marcador numérico a buscar (ej: "<<1>>")
             start_search_idx: Índice desde donde empezar la búsqueda (después del índice)
 
         Returns:
-            Número de página donde se encuentra el título, o None si no se encuentra
+            Número de página donde se encuentra el marcador, o None si no se encuentra
         """
-        # Limpiar el título (eliminar puntos y números de página si existen)
-        clean_title = re.sub(r'[\.\s]+\d+$', '', title).strip()
-
-        # Contador de saltos de página
+        # Contador de páginas
         page_count = 1
 
-        # Buscar el título en el documento (después del índice)
+        # Buscar el marcador en el documento (después del índice)
         for i in range(start_search_idx + 1, len(self.doc.paragraphs)):
             para = self.doc.paragraphs[i]
 
-            # Verificar si hay un salto de página antes de este párrafo
-            # Esto se hace verificando los runs del párrafo
+            # Verificar si hay un salto de página en este párrafo
             for run in para.runs:
                 if self._has_page_break(run):
                     page_count += 1
 
-            # Verificar si este párrafo contiene el título
-            para_text = para.text.strip()
-
-            # Comparación flexible (ignorar mayúsculas/minúsculas y espacios extra)
-            if clean_title.lower() in para_text.lower() or para_text.lower() in clean_title.lower():
-                # Si el párrafo tiene el título, devolver el número de página actual
+            # Verificar si este párrafo contiene el marcador
+            if marker in para.text:
                 return page_count
 
-            # También verificar si el título está al principio del párrafo
-            if para_text.lower().startswith(clean_title.lower()[:20]):  # Primeros 20 caracteres
-                return page_count
-
-        # Si no se encuentra el título, devolver None
+        # Si no se encuentra el marcador, devolver None
         return None
+
+    def _remove_numeric_markers(self):
+        """
+        Elimina todos los marcadores numéricos (<<1>>, <<2>>, etc.) del documento.
+        """
+        marker_pattern = re.compile(r'<<\d+>>')
+
+        # Eliminar de párrafos
+        for paragraph in self.doc.paragraphs:
+            if marker_pattern.search(paragraph.text):
+                paragraph.text = marker_pattern.sub('', paragraph.text)
+
+        # Eliminar de tablas
+        for table in self.doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        if marker_pattern.search(paragraph.text):
+                            paragraph.text = marker_pattern.sub('', paragraph.text)
+
+        # Eliminar de headers y footers
+        for section in self.doc.sections:
+            # Header
+            header = section.header
+            for paragraph in header.paragraphs:
+                if marker_pattern.search(paragraph.text):
+                    paragraph.text = marker_pattern.sub('', paragraph.text)
+
+            # Footer
+            footer = section.footer
+            for paragraph in footer.paragraphs:
+                if marker_pattern.search(paragraph.text):
+                    paragraph.text = marker_pattern.sub('', paragraph.text)
 
     def _has_page_break(self, run) -> bool:
         """

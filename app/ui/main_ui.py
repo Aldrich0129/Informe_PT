@@ -144,6 +144,55 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
                     st.session_state[f"tnmm_op_{n}_uq"] = table_data.get("uq", 4.0)
                     st.session_state[f"tnmm_op_{n}_max"] = table_data.get("max", 5.0)
 
+                # Para partidas contables
+                elif table_key == "partidas_contables":
+                    if isinstance(table_data, dict):
+                        for row_id, values in table_data.items():
+                            if isinstance(values, dict):
+                                st.session_state[f"partida_{row_id}_ea"] = values.get("ejercicio_actual", 0.0)
+                                st.session_state[f"partida_{row_id}_ep"] = values.get("ejercicio_anterior", 0.0)
+
+                # Para cumplimiento inicial LF
+                elif table_key == "cumplimiento_inicial_LF":
+                    if isinstance(table_data, list):
+                        for i, row in enumerate(table_data):
+                            st.session_state[f"cumplimiento_inicial_LF_{i}"] = row.get("cumplimiento", "No")
+
+                # Para cumplimiento inicial MF
+                elif table_key == "cumplimiento_inicial_MF":
+                    if isinstance(table_data, list):
+                        for i, row in enumerate(table_data):
+                            st.session_state[f"cumplimiento_inicial_MF_{i}"] = row.get("cumplimiento", "No")
+
+                # Para cumplimiento formal LF
+                elif table_key == "cumplimiento_formal_LF":
+                    if isinstance(table_data, list):
+                        for i, row in enumerate(table_data):
+                            # Generar la key basada en los primeros 20 caracteres del requisito
+                            requisito = row.get("requisito", "")
+                            st.session_state[f"cumplimiento_formal_LF_det_{requisito[:20]}"] = row.get("cumplimiento", "No")
+                            if row.get("comentario"):
+                                st.session_state[f"cumplimiento_formal_LF_com_{requisito[:20]}"] = row.get("comentario", "")
+
+                # Para cumplimiento formal MF
+                elif table_key == "cumplimiento_formal_MF":
+                    if isinstance(table_data, list):
+                        for i, row in enumerate(table_data):
+                            # Generar la key basada en los primeros 20 caracteres del requisito
+                            requisito = row.get("requisito", "")
+                            st.session_state[f"cumplimiento_formal_MF_det_{requisito[:20]}"] = row.get("cumplimiento", "No")
+                            if row.get("comentario"):
+                                st.session_state[f"cumplimiento_formal_MF_com_{requisito[:20]}"] = row.get("comentario", "")
+
+                # Para riesgos PT
+                elif table_key == "riesgos_pt":
+                    if isinstance(table_data, list):
+                        for i, row in enumerate(table_data):
+                            st.session_state[f"riesgo_{i}_impacto"] = row.get("impacto_compania", "No")
+                            st.session_state[f"riesgo_{i}_prelim"] = row.get("nivel_afectacion_preliminar", "No")
+                            st.session_state[f"riesgo_{i}_mitig"] = row.get("mitigadores", "")
+                            st.session_state[f"riesgo_{i}_final"] = row.get("nivel_afectacion_final", "No")
+
         # Resetear bandera para no repetir el proceso
         st.session_state.data_loaded = False
 
