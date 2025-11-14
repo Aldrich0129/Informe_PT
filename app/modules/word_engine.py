@@ -745,26 +745,42 @@ class WordEngine:
             para = self.doc.paragraphs[i]
 
             if marker in para.text:
-                # Verificar si este párrafo ya tiene un salto de página al inicio
+                # Verificar si ya hay un salto de página antes de este párrafo
+                # Comprobar el párrafo anterior
                 has_page_break = False
-                if para.runs:
+                if i > 0:
+                    prev_para = self.doc.paragraphs[i - 1]
+                    # Revisar si el párrafo anterior tiene un salto de página al final
+                    for run in prev_para.runs:
+                        if self._has_page_break(run):
+                            has_page_break = True
+                            break
+
+                # También verificar si el párrafo actual tiene un salto de página al inicio
+                if not has_page_break and para.runs:
                     for run in para.runs:
                         if self._has_page_break(run):
                             has_page_break = True
                             break
 
-                # Si no tiene salto de página, insertar uno al principio del párrafo
+                # Si no tiene salto de página, insertar uno al final del párrafo anterior
                 if not has_page_break:
-                    # Insertar un salto de página al principio del párrafo
-                    # Crear un nuevo run al principio
-                    if para.runs:
-                        first_run = para.runs[0]
-                        # Insertar el salto de página en el primer run
-                        first_run.add_break(WD_BREAK.PAGE)
-                    else:
-                        # Si no hay runs, crear uno nuevo
-                        run = para.add_run()
+                    if i > 0:
+                        # Insertar el salto de página al final del párrafo anterior
+                        prev_para = self.doc.paragraphs[i - 1]
+                        run = prev_para.add_run()
                         run.add_break(WD_BREAK.PAGE)
+                    else:
+                        # Si no hay párrafo anterior, insertar al inicio del párrafo actual
+                        # usando XML para insertar al principio
+                        if para.runs:
+                            # Insertar un nuevo run al principio con el salto de página
+                            new_run = para.insert_paragraph_before().add_run()
+                            new_run.add_break(WD_BREAK.PAGE)
+                        else:
+                            # Si no hay runs, crear uno nuevo
+                            run = para.add_run()
+                            run.add_break(WD_BREAK.PAGE)
 
                 # Solo procesar la primera ocurrencia
                 break
