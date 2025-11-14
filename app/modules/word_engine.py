@@ -4,7 +4,7 @@ Maneja reemplazo de variables, inserción de tablas y bloques condicionales.
 """
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from pathlib import Path
@@ -699,7 +699,7 @@ class WordEngine:
 
             # Añadir un salto de página al final del párrafo anterior
             run = prev_para.add_run()
-            run.add_break(break_type=6)  # WD_BREAK.PAGE = 6
+            run.add_break(WD_BREAK.PAGE)
 
     def _find_title_page_number(self, title: str, start_search_idx: int) -> Optional[int]:
         """
