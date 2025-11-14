@@ -215,8 +215,11 @@ def render_tnmm_operacion(cfg_tab: dict, n: int, nombre: str) -> dict:
     # Valores por defecto para min, lq, med, uq, max
     default_values = [1.0, 2.0, 3.0, 4.0, 5.0]
 
-    cols = st.columns(5)
-    for i, col_cfg in enumerate(cfg["columns"]):
+    # Filtrar columnas para excluir 'nombre_operacion' ya que se proporciona como parámetro
+    numeric_columns = [col for col in cfg["columns"] if col["id"] != "nombre_operacion"]
+
+    cols = st.columns(len(numeric_columns))
+    for i, col_cfg in enumerate(numeric_columns):
         col_id = col_cfg["id"]
         header = col_cfg["header"]
 

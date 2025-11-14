@@ -617,6 +617,155 @@ class WordEngine:
                 paragraph.paragraph_format.space_before = Pt(0)
                 paragraph.paragraph_format.space_after = Pt(0)
 
+    def process_table_of_contents(self):
+        """
+        Procesa el índice (tabla de contenidos) del documento.
+
+        Busca contenidos entre <<Indice>> y <<fin Indice>>, localiza cada título
+        en el documento, calcula el número de página y actualiza el índice.
+
+        El índice siempre empezará en una nueva página.
+        """
+        # Buscar los marcadores de inicio y fin del índice
+        toc_start_idx = None
+        toc_end_idx = None
+
+        for i, paragraph in enumerate(self.doc.paragraphs):
+            text = paragraph.text.strip()
+            if "<<Indice>>" in text:
+                toc_start_idx = i
+            elif "<<fin Indice>>" in text:
+                toc_end_idx = i
+                break
+
+        # Si no se encuentran los marcadores, no hacer nada
+        if toc_start_idx is None or toc_end_idx is None:
+            return
+
+        # Extraer los títulos del índice (entre los marcadores)
+        toc_titles = []
+        toc_paragraphs = []
+
+        for i in range(toc_start_idx + 1, toc_end_idx):
+            para = self.doc.paragraphs[i]
+            title = para.text.strip()
+
+            if title:  # Solo procesar párrafos no vacíos
+                toc_titles.append(title)
+                toc_paragraphs.append(para)
+
+        # Buscar cada título en el documento y calcular su número de página
+        # Crear un mapa de títulos a números de página
+        title_to_page = {}
+
+        for title in toc_titles:
+            page_num = self._find_title_page_number(title, toc_end_idx)
+            if page_num is not None:
+                title_to_page[title] = page_num
+
+        # Actualizar el índice con los números de página
+        for i, para in enumerate(toc_paragraphs):
+            title = toc_titles[i]
+
+            if title in title_to_page:
+                page_num = title_to_page[title]
+
+                # Actualizar el texto del párrafo para incluir el número de página
+                # Formato: "Título .................................................. Página"
+                # Eliminar cualquier número de página existente al final
+                clean_title = re.sub(r'[\.\s]+\d+$', '', title).strip()
+
+                # Calcular el número de puntos necesarios (longitud aproximada)
+                # Longitud típica de una línea: ~80 caracteres
+                dots_length = max(3, 80 - len(clean_title) - len(str(page_num)) - 2)
+                dots = '.' * dots_length
+
+                # Actualizar el párrafo
+                para.text = f"{clean_title} {dots} {page_num}"
+
+        # Eliminar el marcador <<Indice>>
+        start_para = self.doc.paragraphs[toc_start_idx]
+        start_para.text = start_para.text.replace("<<Indice>>", "").strip()
+
+        # Eliminar el marcador <<fin Indice>>
+        end_para = self.doc.paragraphs[toc_end_idx]
+        end_para.text = end_para.text.replace("<<fin Indice>>", "").strip()
+
+        # Asegurar que el índice empiece en una nueva página
+        # Insertar un salto de página antes del índice
+        if toc_start_idx > 0:
+            # Obtener el párrafo antes del índice
+            prev_para = self.doc.paragraphs[toc_start_idx - 1]
+
+            # Añadir un salto de página al final del párrafo anterior
+            run = prev_para.add_run()
+            run.add_break(break_type=6)  # WD_BREAK.PAGE = 6
+
+    def _find_title_page_number(self, title: str, start_search_idx: int) -> Optional[int]:
+        """
+        Encuentra el número de página donde aparece un título en el documento.
+
+        Los títulos siempre empiezan en la primera línea de una nueva página.
+
+        Args:
+            title: Título a buscar
+            start_search_idx: Índice desde donde empezar la búsqueda (después del índice)
+
+        Returns:
+            Número de página donde se encuentra el título, o None si no se encuentra
+        """
+        # Limpiar el título (eliminar puntos y números de página si existen)
+        clean_title = re.sub(r'[\.\s]+\d+$', '', title).strip()
+
+        # Contador de saltos de página
+        page_count = 1
+
+        # Buscar el título en el documento (después del índice)
+        for i in range(start_search_idx + 1, len(self.doc.paragraphs)):
+            para = self.doc.paragraphs[i]
+
+            # Verificar si hay un salto de página antes de este párrafo
+            # Esto se hace verificando los runs del párrafo
+            for run in para.runs:
+                if self._has_page_break(run):
+                    page_count += 1
+
+            # Verificar si este párrafo contiene el título
+            para_text = para.text.strip()
+
+            # Comparación flexible (ignorar mayúsculas/minúsculas y espacios extra)
+            if clean_title.lower() in para_text.lower() or para_text.lower() in clean_title.lower():
+                # Si el párrafo tiene el título, devolver el número de página actual
+                return page_count
+
+            # También verificar si el título está al principio del párrafo
+            if para_text.lower().startswith(clean_title.lower()[:20]):  # Primeros 20 caracteres
+                return page_count
+
+        # Si no se encuentra el título, devolver None
+        return None
+
+    def _has_page_break(self, run) -> bool:
+        """
+        Verifica si un run contiene un salto de página.
+
+        Args:
+            run: Run de python-docx
+
+        Returns:
+            True si el run contiene un salto de página, False en caso contrario
+        """
+        # Obtener el elemento XML del run
+        run_element = run._element
+
+        # Buscar elementos de salto de página (w:br con w:type="page")
+        for br in run_element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}br'):
+            break_type = br.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type')
+            if break_type == 'page':
+                return True
+
+        return False
+
     def save(self, output_path: Path):
         """
         Guarda el documento generado.

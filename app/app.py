@@ -94,14 +94,17 @@ def main():
                 # 6. Insertar bloques condicionales
                 engine.insert_conditional_blocks(docs_to_insert, config_dir)
 
-                # 7. Limpieza final
+                # 7. Procesar índice (tabla de contenidos)
+                engine.process_table_of_contents()
+
+                # 8. Limpieza final
                 engine.clean_unused_markers()
                 engine.clean_empty_paragraphs()
 
-                # 8. Obtener el documento como bytes
+                # 9. Obtener el documento como bytes
                 doc_bytes = engine.get_document_bytes()
 
-                # 9. Mostrar botón de descarga
+                # 10. Mostrar botón de descarga
                 show_success_message()
 
                 nombre_empresa = simple_inputs.get("nombre_compania", "Empresa")
