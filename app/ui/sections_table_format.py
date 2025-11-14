@@ -20,6 +20,7 @@ def render_table_format_section() -> dict:
         st.session_state.table_format = {
             "show_borders": True,
             "border_style": "single",
+            "border_color": "#000000",
             "header_bg_color": "#4472C4",
             "header_text_color": "#FFFFFF",
             "header_bold": True,
@@ -33,7 +34,7 @@ def render_table_format_section() -> dict:
 
     # Sección de bordes
     st.subheader("Bordes de la Tabla")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         show_borders = st.checkbox(
@@ -58,6 +59,18 @@ def render_table_format_section() -> dict:
             format_config["border_style"] = border_style
         else:
             format_config["border_style"] = "none"
+
+    with col3:
+        if show_borders:
+            border_color = st.color_picker(
+                "Color de bordes",
+                value=st.session_state.table_format["border_color"],
+                key="format_border_color",
+                help="Color de las líneas de borde"
+            )
+            format_config["border_color"] = border_color
+        else:
+            format_config["border_color"] = "#000000"
 
     # Sección de encabezado
     st.subheader("Formato del Encabezado")
@@ -146,6 +159,7 @@ def render_table_format_section() -> dict:
         st.session_state.table_format = {
             "show_borders": True,
             "border_style": "single",
+            "border_color": "#000000",
             "header_bg_color": "#4472C4",
             "header_text_color": "#FFFFFF",
             "header_bold": True,
@@ -161,6 +175,7 @@ def render_table_format_section() -> dict:
     st.subheader("Vista Previa")
 
     # Crear una tabla de ejemplo con el formato aplicado
+    border_color_value = format_config.get("border_color", "#000000")
     preview_html = f"""
     <style>
         .preview-table {{
@@ -175,12 +190,12 @@ def render_table_format_section() -> dict:
             font-size: {header_font_size}pt;
             padding: 8px;
             text-align: left;
-            border: {f'1px {border_style} #ddd' if show_borders else 'none'};
+            border: {f'1px {border_style} {border_color_value}' if show_borders else 'none'};
         }}
         .preview-table td {{
             font-size: {data_font_size}pt;
             padding: 8px;
-            border: {f'1px {border_style} #ddd' if show_borders else 'none'};
+            border: {f'1px {border_style} {border_color_value}' if show_borders else 'none'};
         }}
         .preview-table tr:nth-child(even) {{
             background-color: {alternate_row_color if alternate_rows else 'transparent'};

@@ -3,11 +3,13 @@ UI principal que orquesta todas las secciones de la aplicación.
 """
 import streamlit as st
 from pathlib import Path
+import json
 
 from ui.sections_simple_vars import render_simple_vars_section
 from ui.sections_conditions import render_conditions_section
 from ui.sections_tables import render_tables_section
 from ui.sections_table_format import render_table_format_section
+from modules.utils import export_data_to_json, import_data_from_json, generate_filename
 
 
 def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
@@ -57,6 +59,35 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
         )
 
         st.divider()
+
+        # Sección de guardar/cargar datos
+        st.header("💾 Datos")
+
+        # Botón para cargar datos
+        uploaded_file = st.file_uploader(
+            "Cargar datos guardados",
+            type=["json"],
+            help="Carga un archivo JSON con datos previamente guardados"
+        )
+
+        if uploaded_file is not None:
+            try:
+                data = json.load(uploaded_file)
+                simple_inputs_loaded, condition_inputs_loaded, table_inputs_loaded, table_format_loaded = import_data_from_json(data)
+
+                # Guardar en session_state
+                st.session_state.loaded_simple_inputs = simple_inputs_loaded
+                st.session_state.loaded_condition_inputs = condition_inputs_loaded
+                st.session_state.loaded_table_inputs = table_inputs_loaded
+                st.session_state.loaded_table_format = table_format_loaded
+                st.session_state.data_loaded = True
+
+                st.success("✅ Datos cargados correctamente")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al cargar datos: {e}")
+
+        st.divider()
         st.markdown("**Desarrollado con Streamlit + Python-docx**")
 
     # Usar pestañas para organizar las secciones (Tablas antes de Condiciones)
@@ -83,6 +114,36 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
     # Pestaña 4: Condiciones
     with tabs[3]:
         condition_inputs = render_conditions_section(cfg_cond)
+
+    # Sección de descarga de datos (después de las pestañas)
+    st.markdown("---")
+    st.subheader("💾 Guardar Datos")
+    st.markdown("Descarga todos los datos rellenados para recuperarlos en próximo uso.")
+
+    col1, col2, col3 = st.columns([2, 1, 2])
+
+    with col2:
+        if st.button("💾 Descargar Datos", type="secondary", use_container_width=True):
+            # Generar nombre de archivo
+            nombre_empresa = simple_inputs.get("nombre_compania", "Empresa")
+            ejercicio = simple_inputs.get("ejercicio_completo", "2023")
+            filename = generate_filename(nombre_empresa, ejercicio)
+
+            # Exportar datos
+            data = export_data_to_json(simple_inputs, condition_inputs, table_inputs, table_format_config)
+
+            # Convertir a JSON
+            json_data = json.dumps(data, indent=2, ensure_ascii=False)
+
+            # Botón de descarga
+            st.download_button(
+                label="📥 Descargar JSON",
+                data=json_data,
+                file_name=filename,
+                mime="application/json",
+                type="primary",
+                use_container_width=True
+            )
 
     return simple_inputs, condition_inputs, table_inputs, table_format_config
 
