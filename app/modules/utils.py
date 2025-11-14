@@ -3,6 +3,8 @@ Módulo de utilidades para construir el contexto completo
 que se pasa al motor de generación de Word.
 """
 from typing import Dict, List, Any, Tuple
+import json
+from datetime import datetime
 
 
 def build_simple_context(cfg_simple: dict, simple_inputs: dict) -> dict:
@@ -213,3 +215,70 @@ def validate_inputs(cfg_simple: dict, simple_inputs: dict) -> List[str]:
                 errors.append(f"El campo '{label}' es requerido")
 
     return errors
+
+
+def export_data_to_json(simple_inputs: dict, condition_inputs: dict, table_inputs: dict, table_format_config: dict) -> dict:
+    """
+    Exporta todos los datos a un diccionario para guardar como JSON.
+
+    Args:
+        simple_inputs: Datos de variables simples
+        condition_inputs: Datos de condiciones
+        table_inputs: Datos de tablas
+        table_format_config: Configuración de formato de tablas
+
+    Returns:
+        Diccionario con todos los datos
+    """
+    return {
+        "version": "1.0",
+        "export_date": datetime.now().isoformat(),
+        "simple_inputs": simple_inputs,
+        "condition_inputs": condition_inputs,
+        "table_inputs": table_inputs,
+        "table_format_config": table_format_config
+    }
+
+
+def import_data_from_json(data: dict) -> Tuple[dict, dict, dict, dict]:
+    """
+    Importa datos desde un diccionario JSON.
+
+    Args:
+        data: Diccionario con los datos exportados
+
+    Returns:
+        Tupla con (simple_inputs, condition_inputs, table_inputs, table_format_config)
+    """
+    simple_inputs = data.get("simple_inputs", {})
+    condition_inputs = data.get("condition_inputs", {})
+    table_inputs = data.get("table_inputs", {})
+    table_format_config = data.get("table_format_config", {})
+
+    return simple_inputs, condition_inputs, table_inputs, table_format_config
+
+
+def generate_filename(nombre_empresa: str, ejercicio: str) -> str:
+    """
+    Genera un nombre de archivo con formato: nombre_empresa_ejercicio_XXXX.json
+    donde XXXX son 4 dígitos basados en el timestamp.
+
+    Args:
+        nombre_empresa: Nombre de la empresa
+        ejercicio: Ejercicio fiscal
+
+    Returns:
+        Nombre de archivo generado
+    """
+    # Limpiar el nombre de la empresa (eliminar caracteres especiales)
+    nombre_limpio = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in nombre_empresa)
+    nombre_limpio = nombre_limpio.replace(' ', '_')
+
+    # Obtener 4 dígitos del timestamp (últimos 4 dígitos de milisegundos)
+    timestamp = int(datetime.now().timestamp() * 1000)
+    timestamp_4digits = str(timestamp)[-4:]
+
+    # Generar nombre de archivo
+    filename = f"{nombre_limpio}_{ejercicio}_{timestamp_4digits}.json"
+
+    return filename

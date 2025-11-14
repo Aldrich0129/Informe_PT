@@ -264,6 +264,11 @@ class WordEngine:
         data_font_size = format_config.get("data_font_size", 10)
         alternate_rows = format_config.get("alternate_rows", False)
         alternate_row_color = format_config.get("alternate_row_color", "#F2F2F2")
+        border_color = format_config.get("border_color", "#000000")
+
+        # Aplicar bordes personalizados a toda la tabla si show_borders es True
+        if show_borders:
+            self._apply_table_borders(table, border_color)
 
         # Llenar encabezados
         header_row = table.rows[0]
@@ -351,16 +356,37 @@ class WordEngine:
 
         try:
             if col_type == "percent":
+                # Convertir a número si es posible
+                if isinstance(value, str):
+                    # Eliminar el símbolo % si ya existe
+                    value = value.replace('%', '').strip()
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        return str(value)
+
                 if isinstance(value, (int, float)):
                     return f"{value:.2f}%"
                 return str(value)
             elif col_type == "number":
                 if isinstance(value, (int, float)):
                     return f"{value:,.2f}"
+                elif isinstance(value, str):
+                    try:
+                        value = float(value)
+                        return f"{value:,.2f}"
+                    except ValueError:
+                        return str(value)
                 return str(value)
             elif col_type == "integer":
                 if isinstance(value, (int, float)):
                     return str(int(value))
+                elif isinstance(value, str):
+                    try:
+                        value = int(float(value))
+                        return str(value)
+                    except ValueError:
+                        return str(value)
                 return str(value)
             else:
                 return str(value)
@@ -500,6 +526,37 @@ class WordEngine:
 
         # Añadir el sombreado a las propiedades de la celda
         cell_properties.append(shading)
+
+    def _apply_table_borders(self, table, hex_color: str):
+        """
+        Aplica bordes con color personalizado a todas las celdas de una tabla.
+
+        Args:
+            table: Tabla de python-docx
+            hex_color: Color en formato hexadecimal (ej: "#000000")
+        """
+        # Eliminar el '#' si existe
+        hex_color = hex_color.lstrip('#')
+
+        # Aplicar bordes a cada celda
+        for row in table.rows:
+            for cell in row.cells:
+                tc = cell._element
+                tcPr = tc.get_or_add_tcPr()
+
+                # Crear bordes
+                tcBorders = OxmlElement('w:tcBorders')
+
+                # Definir cada borde (top, left, bottom, right)
+                for border_name in ['top', 'left', 'bottom', 'right']:
+                    border = OxmlElement(f'w:{border_name}')
+                    border.set(qn('w:val'), 'single')
+                    border.set(qn('w:sz'), '4')  # Tamaño del borde
+                    border.set(qn('w:space'), '0')
+                    border.set(qn('w:color'), hex_color)
+                    tcBorders.append(border)
+
+                tcPr.append(tcBorders)
 
     def clean_empty_paragraphs(self):
         """
