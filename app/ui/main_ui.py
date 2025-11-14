@@ -7,6 +7,7 @@ from pathlib import Path
 from ui.sections_simple_vars import render_simple_vars_section
 from ui.sections_conditions import render_conditions_section
 from ui.sections_tables import render_tables_section
+from ui.sections_table_format import render_table_format_section
 
 
 def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
@@ -59,12 +60,13 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
         st.markdown("**Desarrollado con Streamlit + Python-docx**")
 
     # Usar pestañas para organizar las secciones (Tablas antes de Condiciones)
-    tabs = st.tabs(["📝 Variables Simples", "📊 Tablas", "🔀 Condiciones"])
+    tabs = st.tabs(["📝 Variables Simples", "📊 Tablas", "🎨 Formato de Tablas", "🔀 Condiciones"])
 
     # Inicializar variables
     simple_inputs = {}
     condition_inputs = {}
     table_inputs = {}
+    table_format_config = {}
 
     # Pestaña 1: Variables Simples
     with tabs[0]:
@@ -74,11 +76,15 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
     with tabs[1]:
         table_inputs = render_tables_section(cfg_tab, simple_inputs)
 
-    # Pestaña 3: Condiciones
+    # Pestaña 3: Formato de Tablas
     with tabs[2]:
+        table_format_config = render_table_format_section()
+
+    # Pestaña 4: Condiciones
+    with tabs[3]:
         condition_inputs = render_conditions_section(cfg_cond)
 
-    return simple_inputs, condition_inputs, table_inputs
+    return simple_inputs, condition_inputs, table_inputs, table_format_config
 
 
 def render_generation_section():

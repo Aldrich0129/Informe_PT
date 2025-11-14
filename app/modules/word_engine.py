@@ -160,43 +160,55 @@ class WordEngine:
                     if original_run.font.color.rgb:
                         new_run.font.color.rgb = original_run.font.color.rgb
 
-    def insert_tables(self, tables_data: dict, cfg_tab: dict):
+    def insert_tables(self, tables_data: dict, cfg_tab: dict, format_config: dict = None):
         """
         Inserta tablas en los marcadores correspondientes.
 
         Args:
             tables_data: Datos de las tablas construidas
             cfg_tab: Configuración de tablas
+            format_config: Configuración de formato de tablas (opcional)
         """
-        for marker, table_data in tables_data.items():
-            self._insert_table_at_marker(marker, table_data)
+        if format_config is None:
+            format_config = {}
 
-    def _insert_table_at_marker(self, marker: str, table_data: dict):
+        for marker, table_data in tables_data.items():
+            self._insert_table_at_marker(marker, table_data, format_config)
+
+    def _insert_table_at_marker(self, marker: str, table_data: dict, format_config: dict = None):
         """
         Inserta una tabla en la posición del marcador.
 
         Args:
             marker: Marcador donde insertar la tabla
             table_data: Datos de la tabla (rows, columns, etc.)
+            format_config: Configuración de formato de tablas (opcional)
         """
+        if format_config is None:
+            format_config = {}
+
         # Buscar el marcador en el documento
         for i, paragraph in enumerate(self.doc.paragraphs):
             if marker in paragraph.text:
                 # Crear la tabla justo después de este párrafo
-                self._create_table_after_paragraph(i, table_data)
+                self._create_table_after_paragraph(i, table_data, format_config)
 
                 # Limpiar el marcador
                 paragraph.text = paragraph.text.replace(marker, "")
                 return
 
-    def _create_table_after_paragraph(self, para_index: int, table_data: dict):
+    def _create_table_after_paragraph(self, para_index: int, table_data: dict, format_config: dict = None):
         """
         Crea una tabla después de un párrafo específico.
 
         Args:
             para_index: Índice del párrafo
             table_data: Datos de la tabla
+            format_config: Configuración de formato de tablas (opcional)
         """
+        if format_config is None:
+            format_config = {}
+
         columns = table_data.get("columns", [])
         rows = table_data.get("rows", [])
         footer_rows = table_data.get("footer_rows", [])
@@ -219,24 +231,39 @@ class WordEngine:
 
         table = self.doc.add_table(rows=num_rows, cols=num_cols)
 
-        # Intentar aplicar estilo, si no existe usar el estilo por defecto
-        try:
-            table.style = 'Light Grid Accent 1'
-        except KeyError:
-            # Si el estilo no existe, intentar con otros estilos comunes
+        # Aplicar estilo de tabla según configuración
+        show_borders = format_config.get("show_borders", True)
+        if show_borders:
+            # Intentar aplicar estilo con bordes
             try:
-                table.style = 'Light Grid'
+                table.style = 'Light Grid Accent 1'
             except KeyError:
-                # Si ningún estilo funciona, usar 'Table Grid' que es el estándar
                 try:
-                    table.style = 'Table Grid'
+                    table.style = 'Light Grid'
                 except KeyError:
-                    # Si ni siquiera Table Grid existe, dejar el estilo por defecto
-                    pass
+                    try:
+                        table.style = 'Table Grid'
+                    except KeyError:
+                        pass
+        else:
+            # Sin bordes - usar estilo sin líneas
+            try:
+                table.style = 'Table Normal'
+            except KeyError:
+                pass
 
         # Insertar la tabla después del párrafo
         table_element = table._element
         para_element.addnext(table_element)
+
+        # Obtener configuración de formato
+        header_bg_color = format_config.get("header_bg_color", "#4472C4")
+        header_text_color = format_config.get("header_text_color", "#FFFFFF")
+        header_bold = format_config.get("header_bold", True)
+        header_font_size = format_config.get("header_font_size", 11)
+        data_font_size = format_config.get("data_font_size", 10)
+        alternate_rows = format_config.get("alternate_rows", False)
+        alternate_row_color = format_config.get("alternate_row_color", "#F2F2F2")
 
         # Llenar encabezados
         header_row = table.rows[0]
@@ -250,14 +277,26 @@ class WordEngine:
                     header_text = header_text.replace(f"{{{key}}}", str(value))
 
             cell.text = header_text
-            # Aplicar formato de encabezado
+
+            # Aplicar formato de encabezado personalizado
+            self._apply_cell_shading(cell, header_bg_color)
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
-                    run.bold = True
+                    if header_bold:
+                        run.bold = True
+                    run.font.size = Pt(header_font_size)
+                    # Aplicar color de texto del encabezado
+                    run.font.color.rgb = self._hex_to_rgb(header_text_color)
 
         # Llenar filas de datos
         for i, row_data in enumerate(rows):
             row = table.rows[i + 1]
+
+            # Aplicar color alternado a filas pares si está configurado
+            if alternate_rows and i % 2 == 0:
+                for cell in row.cells:
+                    self._apply_cell_shading(cell, alternate_row_color)
+
             for j, col in enumerate(columns):
                 cell = row.cells[j]
                 col_id = col["id"]
@@ -268,6 +307,11 @@ class WordEngine:
                 formatted_value = self._format_cell_value(value, col_type)
 
                 cell.text = formatted_value
+
+                # Aplicar tamaño de fuente a las celdas de datos
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = Pt(data_font_size)
 
         # Llenar filas de footer
         if footer_rows:
@@ -285,10 +329,11 @@ class WordEngine:
 
                     cell.text = formatted_value
 
-                    # Aplicar formato de footer (negrita)
+                    # Aplicar formato de footer (negrita y tamaño de fuente)
                     for paragraph in cell.paragraphs:
                         for run in paragraph.runs:
                             run.bold = True
+                            run.font.size = Pt(data_font_size)
 
     def _format_cell_value(self, value: Any, col_type: str) -> str:
         """
@@ -381,21 +426,80 @@ class WordEngine:
     def clean_unused_markers(self):
         """
         Limpia todos los marcadores no utilizados del documento.
+        Si un párrafo contiene SOLO un marcador (o marcador con puntuación/numeración),
+        elimina el párrafo completo. Si hay más contenido, solo elimina el marcador.
         """
         marker_pattern = re.compile(r'<<[^>]+>>')
 
-        # Limpiar en párrafos
-        for paragraph in self.doc.paragraphs:
+        # Limpiar en párrafos - eliminar líneas completas si solo contienen marcadores
+        paragraphs_to_delete = []
+        for i, paragraph in enumerate(self.doc.paragraphs):
             if marker_pattern.search(paragraph.text):
-                paragraph.text = marker_pattern.sub('', paragraph.text)
+                # Verificar si el párrafo solo contiene marcador y elementos comunes (puntos, números, guiones, espacios)
+                text_without_markers = marker_pattern.sub('', paragraph.text).strip()
+                # Eliminar también puntuación común, números, guiones, viñetas
+                text_cleaned = re.sub(r'^[\d\.\-\)\(\s•·◦▪▫○●\*]+$', '', text_without_markers)
 
-        # Limpiar en tablas
+                if not text_cleaned:
+                    # El párrafo solo contiene marcador + elementos decorativos, marcarlo para eliminación
+                    paragraphs_to_delete.append(paragraph)
+                else:
+                    # Hay contenido real además del marcador, solo eliminar el marcador
+                    paragraph.text = marker_pattern.sub('', paragraph.text)
+
+        # Eliminar los párrafos marcados
+        for paragraph in paragraphs_to_delete:
+            p_element = paragraph._element
+            p_element.getparent().remove(p_element)
+
+        # Limpiar en tablas - solo eliminar el marcador, no la celda
         for table in self.doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         if marker_pattern.search(paragraph.text):
                             paragraph.text = marker_pattern.sub('', paragraph.text)
+
+    def _hex_to_rgb(self, hex_color: str) -> RGBColor:
+        """
+        Convierte un color hexadecimal a RGBColor.
+
+        Args:
+            hex_color: Color en formato hexadecimal (ej: "#4472C4" o "4472C4")
+
+        Returns:
+            Objeto RGBColor
+        """
+        # Eliminar el '#' si existe
+        hex_color = hex_color.lstrip('#')
+
+        # Convertir a RGB
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+
+        return RGBColor(r, g, b)
+
+    def _apply_cell_shading(self, cell, hex_color: str):
+        """
+        Aplica un color de fondo a una celda de tabla.
+
+        Args:
+            cell: Celda de la tabla
+            hex_color: Color en formato hexadecimal (ej: "#4472C4")
+        """
+        # Eliminar el '#' si existe
+        hex_color = hex_color.lstrip('#')
+
+        # Obtener el elemento XML de la celda
+        cell_properties = cell._element.get_or_add_tcPr()
+
+        # Crear elemento de sombreado
+        shading = OxmlElement('w:shd')
+        shading.set(qn('w:fill'), hex_color)
+
+        # Añadir el sombreado a las propiedades de la celda
+        cell_properties.append(shading)
 
     def clean_empty_paragraphs(self):
         """

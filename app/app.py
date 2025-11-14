@@ -40,7 +40,7 @@ def main():
         st.stop()
 
     # Renderizar UI principal
-    simple_inputs, condition_inputs, table_inputs = render_main_ui(
+    simple_inputs, condition_inputs, table_inputs, table_format_config = render_main_ui(
         cfg_simple, cfg_cond, cfg_tab
     )
 
@@ -89,7 +89,7 @@ def main():
                 engine.replace_variables(context)
 
                 # 5. Insertar tablas
-                engine.insert_tables(tables_data, cfg_tab)
+                engine.insert_tables(tables_data, cfg_tab, table_format_config)
 
                 # 6. Insertar bloques condicionales
                 engine.insert_conditional_blocks(docs_to_insert, config_dir)

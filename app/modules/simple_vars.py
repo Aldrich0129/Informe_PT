@@ -57,11 +57,12 @@ def validate_simple_vars(cfg_simple: dict, inputs: dict) -> list:
         label = var["label"]
         var_type = var.get("type", "text")
         marker = var.get("marker")
+        optional = var.get("optional", False)
 
         value = inputs.get(var_id)
 
-        # Si tiene marcador, es requerido
-        if marker is not None:
+        # Si tiene marcador y NO es opcional, es requerido
+        if marker is not None and not optional:
             if value is None or (isinstance(value, str) and not value.strip()):
                 errors.append(f"El campo '{label}' es requerido")
                 continue

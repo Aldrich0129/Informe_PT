@@ -40,21 +40,25 @@ simple_variables:
     label: "Documentación 1"
     marker: "<<Documentación 1>>"
     type: "text"
+    optional: true
 
   - id: documentacion_2
     label: "Documentación 2"
     marker: "<<Documentación 2>>"
     type: "text"
+    optional: true
 
   - id: documentacion_3
     label: "Documentación 3"
     marker: "<<Documentación 3>>"
     type: "text"
+    optional: true
 
   - id: documentacion_4
     label: "Documentación 4"
     marker: "<<Documentación 4>>"
     type: "text"
+    optional: true
 
   # -------------------------------------------------------
   # 3. Información cuantitativa de relevancia PT
@@ -106,6 +110,7 @@ operations:
   base_text_marker_pattern: "<<Operación {n}>>"
   base_tnmm_table_marker_pattern: "<<Tabla Operación {n}>>"
   max_operations: 10       # se puede ampliar si hiciera falta
+  optional: true           # las operaciones son opcionales
 
   items:
     - id: operacion_1
@@ -114,6 +119,7 @@ operations:
       text_marker: "<<Operación 1>>"
       tnmm_table_marker: "<<Tabla Operación 1>>"
       vinculadas_row_hint: 1   # posición sugerida en la tabla operaciones vinculadas (opcional)
+      optional: true
 
     - id: operacion_2
       index: 2
@@ -121,6 +127,7 @@ operations:
       text_marker: "<<Operación 2>>"
       tnmm_table_marker: "<<Tabla Operación 2>>"
       vinculadas_row_hint: 2
+      optional: true
 
     - id: operacion_3
       index: 3
@@ -128,6 +135,7 @@ operations:
       text_marker: "<<Operación 3>>"
       tnmm_table_marker: "<<Tabla Operación 3>>"
       vinculadas_row_hint: 3
+      optional: true
 
     - id: operacion_4
       index: 4
@@ -135,6 +143,7 @@ operations:
       text_marker: "<<Operación 4>>"
       tnmm_table_marker: "<<Tabla Operación 4>>"
       vinculadas_row_hint: 4
+      optional: true
 
     - id: operacion_5
       index: 5
@@ -142,6 +151,7 @@ operations:
       text_marker: "<<Operación 5>>"
       tnmm_table_marker: "<<Tabla Operación 5>>"
       vinculadas_row_hint: 5
+      optional: true
 
     - id: operacion_6
       index: 6
@@ -149,6 +159,7 @@ operations:
       text_marker: "<<Operación 6>>"
       tnmm_table_marker: "<<Tabla Operación 6>>"
       vinculadas_row_hint: 6
+      optional: true
 
     - id: operacion_7
       index: 7
@@ -156,6 +167,7 @@ operations:
       text_marker: "<<Operación 7>>"
       tnmm_table_marker: "<<Tabla Operación 7>>"
       vinculadas_row_hint: 7
+      optional: true
 
     - id: operacion_8
       index: 8
@@ -163,6 +175,7 @@ operations:
       text_marker: "<<Operación 8>>"
       tnmm_table_marker: "<<Tabla Operación 8>>"
       vinculadas_row_hint: 8
+      optional: true
 
     - id: operacion_9
       index: 9
@@ -170,6 +183,7 @@ operations:
       text_marker: "<<Operación 9>>"
       tnmm_table_marker: "<<Tabla Operación 9>>"
       vinculadas_row_hint: 9
+      optional: true
 
     - id: operacion_10
       index: 10
@@ -177,3 +191,4 @@ operations:
       text_marker: "<<Operación 10>>"
       tnmm_table_marker: "<<Tabla Operación 10>>"
       vinculadas_row_hint: 10
+      optional: true
