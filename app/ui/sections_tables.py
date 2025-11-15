@@ -6,7 +6,7 @@ import pandas as pd
 from typing import Dict, List
 
 
-def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
+def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> tuple:
     """
     Renderiza la sección de tablas en Streamlit.
 
@@ -15,12 +15,13 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
         simple_inputs: Datos de variables simples (para ejercicios, etc.)
 
     Returns:
-        Diccionario con {id_tabla: datos}
+        Tupla de (diccionario con {id_tabla: datos}, diccionario con {id_tabla: usar_diseño_personalizado})
     """
     st.header("📊 Tablas")
     st.markdown("Completa los datos de las diferentes tablas del informe.")
 
     all_table_inputs = {}
+    table_custom_design = {}  # Nuevo: diccionario para rastrear qué tablas tienen diseño personalizado
 
     # 1. Tabla de análisis indirecto global (TNMM)
     st.subheader("1. Análisis Indirecto Global (TNMM)")
@@ -40,6 +41,13 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
             })
             st.dataframe(preview_df, use_container_width=True)
 
+    # Checkbox para diseño personalizado
+    table_custom_design["analisis_indirecto_global"] = st.checkbox(
+        "🎨 Personalizar diseño de esta tabla",
+        key="custom_design_analisis_indirecto_global",
+        help="Marque esta casilla para aplicar un diseño personalizado a esta tabla específica"
+    )
+
     st.divider()
 
     # 2. Tabla de operaciones vinculadas
@@ -58,6 +66,13 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
                 "gasto_local_file": "Gasto (EUR)"
             })
             st.dataframe(preview_df, use_container_width=True)
+
+    # Checkbox para diseño personalizado
+    table_custom_design["operaciones_vinculadas"] = st.checkbox(
+        "🎨 Personalizar diseño de esta tabla",
+        key="custom_design_operaciones_vinculadas",
+        help="Marque esta casilla para aplicar un diseño personalizado a esta tabla específica"
+    )
 
     st.divider()
 
@@ -90,6 +105,13 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
                             "max": "Máximo"
                         })
                         st.dataframe(preview_df, use_container_width=True)
+
+                # Checkbox para diseño personalizado de cada tabla TNMM de operación
+                table_custom_design[f"analisis_indirecto_operacion_{i+1}"] = st.checkbox(
+                    "🎨 Personalizar diseño de esta tabla",
+                    key=f"custom_design_analisis_indirecto_operacion_{i+1}",
+                    help="Marque esta casilla para aplicar un diseño personalizado a esta tabla específica"
+                )
     else:
         st.info("Primero agrega operaciones en la tabla de 'Operaciones Vinculadas'")
 
@@ -115,6 +137,13 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
             preview_df = pd.DataFrame(preview_data)
             st.dataframe(preview_df, use_container_width=True)
 
+    # Checkbox para diseño personalizado
+    table_custom_design["partidas_contables"] = st.checkbox(
+        "🎨 Personalizar diseño de esta tabla",
+        key="custom_design_partidas_contables",
+        help="Marque esta casilla para aplicar un diseño personalizado a esta tabla específica"
+    )
+
     st.divider()
 
     # 5. Tablas de cumplimiento inicial
@@ -126,11 +155,21 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
         st.markdown("**Local File (LF)**")
         cumpl_lf = render_cumplimiento_inicial(cfg_tab, "cumplimiento_inicial_LF")
         all_table_inputs["cumplimiento_inicial_LF"] = cumpl_lf
+        table_custom_design["cumplimiento_inicial_LF"] = st.checkbox(
+            "🎨 Personalizar diseño",
+            key="custom_design_cumplimiento_inicial_LF",
+            help="Personalizar el diseño de esta tabla"
+        )
 
     with col2:
         st.markdown("**Master File (MF)**")
         cumpl_mf = render_cumplimiento_inicial(cfg_tab, "cumplimiento_inicial_MF")
         all_table_inputs["cumplimiento_inicial_MF"] = cumpl_mf
+        table_custom_design["cumplimiento_inicial_MF"] = st.checkbox(
+            "🎨 Personalizar diseño",
+            key="custom_design_cumplimiento_inicial_MF",
+            help="Personalizar el diseño de esta tabla"
+        )
 
     st.divider()
 
@@ -140,10 +179,20 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
     with st.expander("Local File (LF) - Detallado"):
         cumpl_det_lf = render_cumplimiento_detallado(cfg_tab, "cumplimiento_formal_LF")
         all_table_inputs["cumplimiento_formal_LF"] = cumpl_det_lf
+        table_custom_design["cumplimiento_formal_LF"] = st.checkbox(
+            "🎨 Personalizar diseño de esta tabla",
+            key="custom_design_cumplimiento_formal_LF",
+            help="Personalizar el diseño de esta tabla"
+        )
 
     with st.expander("Master File (MF) - Detallado"):
         cumpl_det_mf = render_cumplimiento_detallado(cfg_tab, "cumplimiento_formal_MF")
         all_table_inputs["cumplimiento_formal_MF"] = cumpl_det_mf
+        table_custom_design["cumplimiento_formal_MF"] = st.checkbox(
+            "🎨 Personalizar diseño de esta tabla",
+            key="custom_design_cumplimiento_formal_MF",
+            help="Personalizar el diseño de esta tabla"
+        )
 
     st.divider()
 
@@ -166,7 +215,14 @@ def render_tables_section(cfg_tab: dict, simple_inputs: dict) -> dict:
             })
             st.dataframe(preview_df, use_container_width=True)
 
-    return all_table_inputs
+    # Checkbox para diseño personalizado
+    table_custom_design["riesgos_pt"] = st.checkbox(
+        "🎨 Personalizar diseño de esta tabla",
+        key="custom_design_riesgos_pt",
+        help="Marque esta casilla para aplicar un diseño personalizado a esta tabla específica"
+    )
+
+    return all_table_inputs, table_custom_design
 
 
 def render_tnmm_global(cfg_tab: dict) -> dict:

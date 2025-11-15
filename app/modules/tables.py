@@ -87,6 +87,7 @@ class TableBuilder:
             rows.append(row_data)
 
         return {marker: {
+            "table_id": "analisis_indirecto_global",
             "columns": cfg.get("columns", []),
             "rows": rows
         }}
@@ -125,6 +126,7 @@ class TableBuilder:
                 rows.append(row_data)
 
             all_tables[marker] = {
+                "table_id": table_id,
                 "columns": cfg.get("columns", []),
                 "rows": rows
             }
@@ -178,6 +180,7 @@ class TableBuilder:
             rows.append(row_data)
 
         return {marker: {
+            "table_id": "partidas_contables",
             "headers": {
                 "ejercicio_actual": ejercicio_actual,
                 "ejercicio_anterior": ejercicio_anterior
@@ -234,6 +237,7 @@ class TableBuilder:
                 footer_rows.append(peso_row)
 
         return {marker: {
+            "table_id": "operaciones_vinculadas",
             "columns": cfg.get("columns", []),
             "rows": rows,
             "footer_rows": footer_rows
@@ -247,6 +251,7 @@ class TableBuilder:
         rows = table_inputs.get(table_id, [])
 
         return {marker: {
+            "table_id": table_id,
             "columns": cfg.get("columns", []),
             "rows": rows
         }}
@@ -259,6 +264,7 @@ class TableBuilder:
         rows = table_inputs.get("riesgos_pt", [])
 
         return {marker: {
+            "table_id": "riesgos_pt",
             "columns": cfg.get("columns", []),
             "rows": rows
         }}

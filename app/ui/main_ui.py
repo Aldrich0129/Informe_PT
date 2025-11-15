@@ -22,7 +22,7 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
         cfg_tab: Configuración de tablas
 
     Returns:
-        Tupla con (simple_inputs, condition_inputs, table_inputs)
+        Tupla con (simple_inputs, condition_inputs, table_inputs, table_custom_design, table_format_config)
     """
     # Configuración de la página
     st.set_page_config(
@@ -203,6 +203,7 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
     simple_inputs = {}
     condition_inputs = {}
     table_inputs = {}
+    table_custom_design = {}
     table_format_config = {}
 
     # Pestaña 1: Variables Simples
@@ -211,11 +212,11 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
 
     # Pestaña 2: Tablas
     with tabs[1]:
-        table_inputs = render_tables_section(cfg_tab, simple_inputs)
+        table_inputs, table_custom_design = render_tables_section(cfg_tab, simple_inputs)
 
     # Pestaña 3: Formato de Tablas
     with tabs[2]:
-        table_format_config = render_table_format_section()
+        table_format_config = render_table_format_section(table_custom_design)
 
     # Pestaña 4: Condiciones
     with tabs[3]:
@@ -251,7 +252,7 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
                 use_container_width=True
             )
 
-    return simple_inputs, condition_inputs, table_inputs, table_format_config
+    return simple_inputs, condition_inputs, table_inputs, table_custom_design, table_format_config
 
 
 def render_generation_section():

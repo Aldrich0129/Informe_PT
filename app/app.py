@@ -40,7 +40,7 @@ def main():
         st.stop()
 
     # Renderizar UI principal
-    simple_inputs, condition_inputs, table_inputs, table_format_config = render_main_ui(
+    simple_inputs, condition_inputs, table_inputs, table_custom_design, table_format_config = render_main_ui(
         cfg_simple, cfg_cond, cfg_tab
     )
 
@@ -94,10 +94,13 @@ def main():
                 # 6. Insertar bloques condicionales
                 engine.insert_conditional_blocks(docs_to_insert, config_dir)
 
-                # 7. Procesar índice (tabla de contenidos)
+                # 7. Procesar marcadores {salto}
+                engine.process_salto_markers()
+
+                # 8. Procesar índice (tabla de contenidos)
                 engine.process_table_of_contents()
 
-                # 8. Limpieza final
+                # 9. Limpieza final
                 engine.clean_unused_markers()
                 engine.clean_empty_paragraphs()
 

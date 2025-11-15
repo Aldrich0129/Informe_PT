@@ -173,9 +173,13 @@ class WordEngine:
             format_config = {}
 
         for marker, table_data in tables_data.items():
-            self._insert_table_at_marker(marker, table_data, format_config)
+            # Extraer el table_id del marker
+            # Para marcadores simples: "<<Tabla análisis indirecto>>" -> "analisis_indirecto_global"
+            # Para marcadores parametrizados: "<<Tabla Operación 1>>" -> "analisis_indirecto_operacion_1"
+            table_id = table_data.get("table_id", None)
+            self._insert_table_at_marker(marker, table_data, format_config, table_id)
 
-    def _insert_table_at_marker(self, marker: str, table_data: dict, format_config: dict = None):
+    def _insert_table_at_marker(self, marker: str, table_data: dict, format_config: dict = None, table_id: str = None):
         """
         Inserta una tabla en la posición del marcador.
 
@@ -183,6 +187,7 @@ class WordEngine:
             marker: Marcador donde insertar la tabla
             table_data: Datos de la tabla (rows, columns, etc.)
             format_config: Configuración de formato de tablas (opcional)
+            table_id: Identificador de la tabla (para configuración personalizada)
         """
         if format_config is None:
             format_config = {}
@@ -191,13 +196,13 @@ class WordEngine:
         for i, paragraph in enumerate(self.doc.paragraphs):
             if marker in paragraph.text:
                 # Crear la tabla justo después de este párrafo
-                self._create_table_after_paragraph(i, table_data, format_config)
+                self._create_table_after_paragraph(i, table_data, format_config, table_id)
 
                 # Limpiar el marcador
                 paragraph.text = paragraph.text.replace(marker, "")
                 return
 
-    def _create_table_after_paragraph(self, para_index: int, table_data: dict, format_config: dict = None):
+    def _create_table_after_paragraph(self, para_index: int, table_data: dict, format_config: dict = None, table_id: str = None):
         """
         Crea una tabla después de un párrafo específico.
 
@@ -205,9 +210,19 @@ class WordEngine:
             para_index: Índice del párrafo
             table_data: Datos de la tabla
             format_config: Configuración de formato de tablas (opcional)
+            table_id: Identificador de la tabla (para configuración personalizada)
         """
         if format_config is None:
             format_config = {}
+
+        # Verificar si existe configuración personalizada para esta tabla
+        custom_formats = format_config.get("custom_table_formats", {})
+        if table_id and table_id in custom_formats:
+            # Usar la configuración personalizada para esta tabla
+            table_format = custom_formats[table_id]
+        else:
+            # Usar la configuración general
+            table_format = format_config
 
         columns = table_data.get("columns", [])
         rows = table_data.get("rows", [])
@@ -232,7 +247,7 @@ class WordEngine:
         table = self.doc.add_table(rows=num_rows, cols=num_cols)
 
         # Aplicar estilo de tabla según configuración
-        show_borders = format_config.get("show_borders", True)
+        show_borders = table_format.get("show_borders", True)
         if show_borders:
             # Intentar aplicar estilo con bordes
             try:
@@ -257,17 +272,18 @@ class WordEngine:
         para_element.addnext(table_element)
 
         # Obtener configuración de formato
-        header_bg_color = format_config.get("header_bg_color", "#4472C4")
-        header_text_color = format_config.get("header_text_color", "#FFFFFF")
-        header_bold = format_config.get("header_bold", True)
-        header_font_size = format_config.get("header_font_size", 11)
-        data_font_size = format_config.get("data_font_size", 10)
-        alternate_rows = format_config.get("alternate_rows", False)
-        alternate_row_color = format_config.get("alternate_row_color", "#F2F2F2")
-        border_color = format_config.get("border_color", "#000000")
-        first_column_bold = format_config.get("first_column_bold", False)
-        first_column_bg_color = format_config.get("first_column_bg_color", None)
-        first_column_text_color = format_config.get("first_column_text_color", None)
+        header_bg_color = table_format.get("header_bg_color", "#4472C4")
+        header_text_color = table_format.get("header_text_color", "#FFFFFF")
+        header_bold = table_format.get("header_bold", True)
+        header_font_size = table_format.get("header_font_size", 11)
+        data_font_size = table_format.get("data_font_size", 10)
+        alternate_rows = table_format.get("alternate_rows", False)
+        alternate_row_color = table_format.get("alternate_row_color", "#F2F2F2")
+        border_color = table_format.get("border_color", "#000000")
+        first_column_bold = table_format.get("first_column_bold", False)
+        first_column_bg_color = table_format.get("first_column_bg_color", None)
+        first_column_text_color = table_format.get("first_column_text_color", None)
+        column_colors = table_format.get("column_colors", [])
 
         # Aplicar bordes personalizados a toda la tabla si show_borders es True
         if show_borders:
@@ -325,6 +341,15 @@ class WordEngine:
                     # Aplicar color de fondo si está configurado
                     if first_column_bg_color:
                         self._apply_cell_shading(cell, first_column_bg_color)
+
+                # Aplicar color de fondo por columna si está configurado
+                # Esto se aplica después de first_column_bg_color para que tome prioridad
+                # Nota: j es el índice (empezando en 0), pero los usuarios especifican columnas empezando en 1
+                column_number = j + 1
+                for col_color_config in column_colors:
+                    if col_color_config.get("column") == column_number:
+                        self._apply_cell_shading(cell, col_color_config.get("color"))
+                        break
 
                 # Aplicar tamaño de fuente a las celdas de datos
                 for paragraph in cell.paragraphs:
@@ -468,6 +493,51 @@ class WordEngine:
                     para_element = new_table
 
                 return
+
+    def process_salto_markers(self):
+        """
+        Procesa los marcadores {salto} insertando saltos de página antes del marcador
+        y eliminando el marcador del documento.
+        """
+        salto_pattern = re.compile(r'\{salto\}')
+
+        # Procesar párrafos
+        for paragraph in self.doc.paragraphs:
+            if salto_pattern.search(paragraph.text):
+                # Obtener el texto antes y después del marcador
+                text = paragraph.text
+                parts = salto_pattern.split(text, 1)  # Split solo la primera ocurrencia
+
+                if len(parts) == 2:
+                    before_salto = parts[0]
+                    after_salto = parts[1]
+
+                    # Limpiar el párrafo
+                    paragraph.clear()
+
+                    # Agregar el texto antes del salto
+                    if before_salto:
+                        paragraph.add_run(before_salto)
+
+                    # Insertar salto de página
+                    run = paragraph.add_run()
+                    run.add_break(WD_BREAK.PAGE)
+
+                    # Agregar el texto después del salto
+                    if after_salto:
+                        paragraph.add_run(after_salto)
+                else:
+                    # Solo eliminar el marcador si no hay texto después
+                    paragraph.text = salto_pattern.sub('', paragraph.text)
+
+        # Procesar tablas
+        for table in self.doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        if salto_pattern.search(paragraph.text):
+                            # En tablas, solo eliminar el marcador sin insertar salto
+                            paragraph.text = salto_pattern.sub('', paragraph.text)
 
     def clean_unused_markers(self):
         """
