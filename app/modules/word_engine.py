@@ -568,6 +568,14 @@ class WordEngine:
         # Cargar el documento a insertar
         doc_to_insert = Document(doc_path)
 
+        def _clone_without_section_props(paragraph):
+            """Clona un párrafo eliminando cualquier configuración de sección/columnas."""
+            cloned = deepcopy(paragraph._element)
+            sect_pr_nodes = cloned.xpath('./w:pPr/w:sectPr')
+            for node in sect_pr_nodes:
+                node.getparent().remove(node)
+            return cloned
+
         # Buscar el marcador
         for i, paragraph in enumerate(self.doc.paragraphs):
             if marker in paragraph.text:
@@ -582,7 +590,7 @@ class WordEngine:
                 # La plantilla principal mantiene su diseño de columnas original
                 for insert_para in doc_to_insert.paragraphs:
                     # Crear un nuevo párrafo con el mismo formato
-                    new_para = deepcopy(insert_para._element)
+                    new_para = _clone_without_section_props(insert_para)
                     para_element.addnext(new_para)
                     para_element = new_para
 
@@ -1594,10 +1602,11 @@ class WordEngine:
 
             # Reducir un poco el tamaño para evitar problemas de márgenes
             # Los márgenes típicos son alrededor de 1 pulgada (914400 EMU)
-            adjusted_width = page_width - Inches(2).inches  # Restar 2 pulgadas para márgenes
-            adjusted_height = page_height - Inches(2).inches  # Restar 2 pulgadas para márgenes
+            margin = Inches(2)  # 2 pulgadas totales (1" por cada lado)
+            adjusted_width = max(page_width - margin, Inches(1))
+            adjusted_height = max(page_height - margin, Inches(1))
 
-            picture = run.add_picture(str(image_path), width=int(adjusted_width), height=int(adjusted_height))
+            picture = run.add_picture(str(image_path), width=adjusted_width, height=adjusted_height)
 
             print(f"Imagen insertada en página {page_type}: {image_path.name}")
 
