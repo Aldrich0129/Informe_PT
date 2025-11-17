@@ -262,56 +262,107 @@ class XMLWordEngineAdapter:
         for doc_info in docs_to_insert:
             marker = doc_info['marker']
             file_name = doc_info['file']
-            file_path = config_dir.parent / 'condiciones' / file_name
-            
+            # file_name ya incluye 'condiciones/' en el yaml (ej: "condiciones/nocumple1.docx")
+            file_path = config_dir.parent / file_name
+
             self._insert_conditional_block(marker, file_path)
     
     def _insert_conditional_block(self, marker: str, block_file: Path):
-        """Inserta un bloque de Word."""
+        """
+        Inserta un bloque de Word preservando todo el formato EXCEPTO section properties.
+
+        IMPORTANTE: Este método copia TODO el contenido con formato (fuentes, colores,
+        negritas, tablas, etc.) PERO elimina configuración de secciones (sectPr) para
+        preservar el diseño de doble columna del documento principal.
+
+        Args:
+            marker: Marcador donde insertar el bloque
+            block_file: Archivo Word a insertar
+        """
         if not block_file.exists():
             return
-        
+
         block_temp = tempfile.mkdtemp()
         try:
             with zipfile.ZipFile(block_file, 'r') as zip_ref:
                 zip_ref.extractall(block_temp)
-            
+
             block_xml_path = Path(block_temp) / 'word' / 'document.xml'
             block_tree = etree.parse(str(block_xml_path), self.parser)
             block_root = block_tree.getroot()
-            
+
             block_body = block_root.find(f'.//{{{self.w_ns}}}body')
             if block_body is None:
                 return
-            
+
+            # Obtener todos los elementos del cuerpo del documento
             block_elements = list(block_body)
-            
+
             # Buscar párrafo con marcador
             target_para = None
             all_paras = self.root.findall(f'.//{{{self.w_ns}}}p')
-            
+
             for para in all_paras:
                 para_text = self._get_paragraph_text(para)
                 if marker in para_text:
                     target_para = para
                     break
-            
+
             if target_para is None:
                 return
-            
-            # Insertar elementos
+
+            # Insertar elementos REMOVIENDO section properties para preservar columnas
             parent = target_para.getparent()
             para_pos = list(parent).index(target_para)
-            
+
             for i, elem in enumerate(block_elements):
+                # Hacer copia profunda del elemento
                 elem_copy = deepcopy(elem)
+
+                # CRÍTICO: Remover sectPr (propiedades de sección) para preservar columnas
+                # Las section properties incluyen configuración de columnas, márgenes, etc.
+                # Si las copiamos, romperán el diseño de doble columna del documento principal
+                self._remove_section_properties_from_element(elem_copy)
+
+                # Insertar el elemento limpio
                 parent.insert(para_pos + 1 + i, elem_copy)
-            
-            # Eliminar párrafo con marcador
-            parent.remove(target_para)
-            
+
+            # Limpiar el marcador del párrafo original sin eliminarlo
+            # (para preservar cualquier configuración de sección que pueda tener)
+            self._remove_marker_from_paragraph(target_para, marker)
+
+            # Si el párrafo quedó vacío después de limpiar el marcador, eliminarlo
+            para_text_after = self._get_paragraph_text(target_para).strip()
+            if not para_text_after:
+                parent.remove(target_para)
+
         finally:
             shutil.rmtree(block_temp, ignore_errors=True)
+
+    def _remove_section_properties_from_element(self, elem: etree.Element):
+        """
+        Remueve recursivamente todas las propiedades de sección (sectPr) de un elemento.
+
+        Esto es CRÍTICO para preservar el diseño de doble columna del documento principal.
+        Las section properties controlan el layout de columnas, y si se copian del documento
+        de condición, romperán el diseño del documento principal.
+
+        Args:
+            elem: Elemento XML del cual remover sectPr
+        """
+        # Si el elemento es un párrafo, buscar sectPr en sus propiedades
+        if elem.tag == f'{{{self.w_ns}}}p':
+            pPr = elem.find(f'{{{self.w_ns}}}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{{{self.w_ns}}}sectPr')
+                if sectPr is not None:
+                    pPr.remove(sectPr)
+
+        # Buscar y remover sectPr en el nivel de body (no debería estar aquí, pero por seguridad)
+        for sectPr in elem.findall(f'.//{{{self.w_ns}}}sectPr'):
+            parent = sectPr.getparent()
+            if parent is not None:
+                parent.remove(sectPr)
     
     # Métodos simplificados/stub para compatibilidad
     def process_salto_markers(self):
