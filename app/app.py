@@ -100,8 +100,8 @@ def main():
                 # 8. Procesar índice (tabla de contenidos)
                 engine.process_table_of_contents()
 
-                # 9. Limpieza final
-                engine.clean_unused_markers()  # Ya protege imágenes
+                # 9. Limpieza final - eliminar TODOS los marcadores << >>
+                engine.clean_unused_markers()  # Elimina todos los marcadores preservando imágenes y diseño de columnas
 
                 # 10. Eliminar líneas vacías al inicio de páginas (nueva mejora)
                 engine.remove_empty_lines_at_page_start()

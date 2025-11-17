@@ -613,13 +613,16 @@ class XMLWordEngineAdapter:
 
     def clean_unused_markers(self):
         """
-        Limpia marcadores no utilizados del documento.
+        Elimina TODOS los marcadores << >> del documento generado.
 
-        Si un párrafo contiene SOLO un marcador (o marcador con puntuación/numeración),
-        elimina el párrafo completo. Si hay más contenido, solo elimina el marcador.
+        Este método elimina completamente todos los marcadores del formato << >> que
+        puedan quedar en el documento, ya sean utilizados o no. Si un párrafo contiene
+        SOLO un marcador (o marcador con puntuación/numeración), elimina el párrafo
+        completo. Si hay más contenido, solo elimina el marcador.
 
         IMPORTANTE: Nunca elimina párrafos que contengan imágenes, shapes o dibujos,
-        o que tengan configuración de sección (sectPr), para preservar el diseño.
+        o que tengan configuración de sección (sectPr), para preservar el diseño
+        de doble columna y otros elementos visuales.
         """
         marker_pattern = re.compile(r'<<[^>]+>>')
         body = self.root.find(f'.//{{{self.w_ns}}}body')
@@ -666,6 +669,60 @@ class XMLWordEngineAdapter:
         # Eliminar los párrafos marcados
         for para in paras_to_delete:
             body.remove(para)
+
+        # Segunda pasada: eliminar cualquier marcador restante en tablas, headers y footers
+        # Esto asegura que TODOS los marcadores << >> sean eliminados del documento
+        self._remove_all_markers_from_tables()
+        self._remove_all_markers_from_headers_footers()
+
+    def _remove_all_markers_from_tables(self):
+        """Elimina todos los marcadores << >> de todas las tablas del documento."""
+        marker_pattern = re.compile(r'<<[^>]+>>')
+
+        # Buscar todas las tablas en el documento
+        for table in self.root.findall(f'.//{{{self.w_ns}}}tbl'):
+            # Buscar todos los elementos de texto en la tabla
+            for text_elem in table.findall(f'.//{{{self.w_ns}}}t'):
+                if text_elem.text and marker_pattern.search(text_elem.text):
+                    text_elem.text = marker_pattern.sub('', text_elem.text)
+
+    def _remove_all_markers_from_headers_footers(self):
+        """Elimina todos los marcadores << >> de headers y footers."""
+        marker_pattern = re.compile(r'<<[^>]+>>')
+
+        # Headers y footers están en archivos separados dentro del documento
+        # Buscar en header*.xml y footer*.xml
+        header_footer_paths = [
+            Path(self.temp_dir) / 'word' / 'header1.xml',
+            Path(self.temp_dir) / 'word' / 'header2.xml',
+            Path(self.temp_dir) / 'word' / 'header3.xml',
+            Path(self.temp_dir) / 'word' / 'footer1.xml',
+            Path(self.temp_dir) / 'word' / 'footer2.xml',
+            Path(self.temp_dir) / 'word' / 'footer3.xml',
+        ]
+
+        for hf_path in header_footer_paths:
+            if hf_path.exists():
+                try:
+                    tree = etree.parse(str(hf_path), self.parser)
+                    root = tree.getroot()
+
+                    # Eliminar marcadores de todos los elementos de texto
+                    for text_elem in root.findall(f'.//{{{self.w_ns}}}t'):
+                        if text_elem.text and marker_pattern.search(text_elem.text):
+                            text_elem.text = marker_pattern.sub('', text_elem.text)
+
+                    # Guardar el archivo modificado
+                    tree.write(
+                        str(hf_path),
+                        encoding='UTF-8',
+                        xml_declaration=True,
+                        standalone=True,
+                        pretty_print=False
+                    )
+                except Exception:
+                    # Si hay algún error, continuar con el siguiente
+                    pass
 
     def _paragraph_has_section_break_xml(self, para: etree.Element) -> bool:
         """
