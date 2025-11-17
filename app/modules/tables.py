@@ -2,6 +2,7 @@
 Módulo para procesar y construir las estructuras de datos de las tablas
 según las configuraciones del YAML tablas.yaml.
 """
+import re
 from typing import Dict, List, Any, Optional
 
 
@@ -138,8 +139,14 @@ class TableBuilder:
         cfg = self.tables_config["partidas_contables"]
         marker = cfg["marker"]
 
-        ejercicio_actual = self.simple_inputs.get("ejercicio_completo", "2023")
-        ejercicio_anterior = self.simple_inputs.get("ejercicio_anterior", "2022")
+        ejercicio_actual = self._extract_year(
+            self.simple_inputs.get("ejercicio_corto")
+            or self.simple_inputs.get("ejercicio_completo")
+            or "2023"
+        )
+        ejercicio_anterior = self._extract_year(
+            self.simple_inputs.get("ejercicio_anterior") or "2022"
+        )
 
         data = table_inputs.get("partidas_contables", {})
 
@@ -188,6 +195,16 @@ class TableBuilder:
             "columns": cfg.get("columns", []),
             "rows": rows
         }}
+
+    @staticmethod
+    def _extract_year(value: Optional[str]) -> str:
+        """Extrae el año (primer número de 4 dígitos) de un texto."""
+
+        if not value:
+            return ""
+
+        match = re.search(r"(\d{4})", str(value))
+        return match.group(1) if match else str(value)
 
     def build_operaciones_vinculadas(self, table_inputs: dict) -> dict:
         """Construye la tabla de operaciones vinculadas con totales."""
