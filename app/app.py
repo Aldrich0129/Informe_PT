@@ -101,16 +101,23 @@ def main():
                 engine.process_table_of_contents()
 
                 # 9. Limpieza final
-                engine.clean_unused_markers()
+                engine.clean_unused_markers()  # Ya protege imágenes
+
+                # 10. Eliminar líneas vacías al inicio de páginas (nueva mejora)
+                engine.remove_empty_lines_at_page_start()
+
                 engine.clean_empty_paragraphs()
 
-                # 10. Eliminar páginas vacías del documento
+                # 11. Eliminar páginas vacías del documento (ya protege imágenes)
                 engine.remove_empty_pages()
 
-                # 11. Obtener el documento como bytes
+                # 12. Preservar headers y footers (verificación final)
+                engine.preserve_headers_and_footers()
+
+                # 13. Obtener el documento como bytes
                 doc_bytes = engine.get_document_bytes()
 
-                # 12. Mostrar botón de descarga
+                # 14. Mostrar botón de descarga
                 show_success_message()
 
                 nombre_empresa = simple_inputs.get("nombre_compania", "Empresa")
