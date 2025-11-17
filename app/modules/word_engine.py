@@ -355,6 +355,10 @@ class WordEngine:
         table_element = table._element
         para_element.addnext(table_element)
 
+        # Añadir un párrafo vacío después de la tabla para evitar que se peguen
+        spacer_para = OxmlElement("w:p")
+        table_element.addnext(spacer_para)
+
         # Obtener configuración de formato
         header_bg_color = table_format.get("header_bg_color", "#4472C4")
         header_text_color = table_format.get("header_text_color", "#FFFFFF")

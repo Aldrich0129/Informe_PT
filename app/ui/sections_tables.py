@@ -454,19 +454,19 @@ def render_cumplimiento_inicial(cfg_tab: dict, table_id: str) -> list:
     # Filas predefinidas según el artículo (simplificado)
     if "LF" in table_id:
         secciones = [
-            "1. Identificación de la entidad",
-            "2. Descripción del negocio",
-            "3. Operaciones vinculadas",
-            "4. Información financiera",
-            "5. Acuerdos de precios de transferencia"
+            "Identificación de la entidad",
+            "Descripción del negocio",
+            "Operaciones vinculadas",
+            "Información financiera",
+            "Acuerdos de precios de transferencia"
         ]
     else:  # MF
         secciones = [
-            "1. Estructura organizativa",
-            "2. Descripción del negocio",
-            "3. Activos intangibles",
-            "4. Actividades financieras",
-            "5. Situación financiera y fiscal"
+            "Estructura organizativa",
+            "Descripción del negocio",
+            "Activos intangibles",
+            "Actividades financieras",
+            "Situación financiera y fiscal"
         ]
 
     rows = []

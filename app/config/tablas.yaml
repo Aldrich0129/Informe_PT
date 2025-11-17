@@ -96,11 +96,11 @@ tables:
         type: "text"
         editable: false
       - id: ejercicio_actual
-        header_template: "Ejercicio {ejercicio_actual}"
+        header_template: "{ejercicio_actual}"
         type: "number"
         editable: true
       - id: ejercicio_anterior
-        header_template: "Ejercicio {ejercicio_anterior}"
+        header_template: "{ejercicio_anterior}"
         type: "number"
         editable: true
       - id: variacion
