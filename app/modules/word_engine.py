@@ -698,6 +698,122 @@ class WordEngine:
                 paragraph.paragraph_format.space_before = Pt(0)
                 paragraph.paragraph_format.space_after = Pt(0)
 
+    def remove_empty_pages(self):
+        """
+        Elimina páginas completamente vacías del documento.
+
+        Una página se considera vacía si:
+        - Solo contiene párrafos vacíos (sin texto o solo espacios en blanco)
+        - Solo contiene saltos de página sin contenido significativo
+
+        Este método analiza el documento y elimina:
+        - Saltos de página consecutivos que crean páginas en blanco
+        - Párrafos vacíos que preceden a saltos de página
+        """
+        # Lista para rastrear párrafos a eliminar
+        paragraphs_to_remove = []
+
+        # Recorrer todos los párrafos del documento
+        i = 0
+        while i < len(self.doc.paragraphs):
+            para = self.doc.paragraphs[i]
+
+            # Verificar si el párrafo está vacío o solo tiene espacios
+            text = para.text.strip()
+
+            # Verificar si el párrafo tiene un salto de página
+            has_page_break = any(self._has_page_break(run) for run in para.runs)
+
+            if has_page_break and not text:
+                # Este párrafo solo tiene un salto de página sin contenido
+                # Verificar si los párrafos anteriores también están vacíos
+                j = i - 1
+                consecutive_empty = 0
+
+                while j >= 0:
+                    prev_para = self.doc.paragraphs[j]
+                    prev_text = prev_para.text.strip()
+                    prev_has_break = any(self._has_page_break(run) for run in prev_para.runs)
+
+                    if not prev_text and not prev_has_break:
+                        # Párrafo vacío sin salto de página
+                        consecutive_empty += 1
+                        j -= 1
+                    elif not prev_text and prev_has_break:
+                        # Otro salto de página vacío, esto crea una página en blanco
+                        # Marcar para eliminación
+                        paragraphs_to_remove.append(para)
+                        break
+                    else:
+                        # Hay contenido antes del salto, no eliminar
+                        break
+
+                # Si hay muchos párrafos vacíos antes del salto, marcar esos también
+                if consecutive_empty > 2:
+                    for k in range(j + 1, i):
+                        if k >= 0:
+                            paragraphs_to_remove.append(self.doc.paragraphs[k])
+
+            elif not text and i > 0:
+                # Párrafo vacío sin salto de página
+                # Verificar si el siguiente también está vacío o es un salto de página
+                if i + 1 < len(self.doc.paragraphs):
+                    next_para = self.doc.paragraphs[i + 1]
+                    next_text = next_para.text.strip()
+                    next_has_break = any(self._has_page_break(run) for run in next_para.runs)
+
+                    # Si el siguiente es un salto de página vacío, marcar este párrafo vacío también
+                    if next_has_break and not next_text:
+                        # Verificar cuántos párrafos vacíos consecutivos hay
+                        k = i
+                        empty_count = 0
+                        while k >= 0 and not self.doc.paragraphs[k].text.strip():
+                            empty_count += 1
+                            k -= 1
+
+                        # Si hay más de 3 párrafos vacíos consecutivos seguidos de un salto de página,
+                        # probablemente es una página vacía
+                        if empty_count > 3:
+                            paragraphs_to_remove.append(para)
+
+            i += 1
+
+        # Eliminar los párrafos marcados
+        for para in paragraphs_to_remove:
+            try:
+                p_element = para._element
+                p_element.getparent().remove(p_element)
+            except Exception:
+                # Si falla, continuar con el siguiente
+                pass
+
+        # Segunda pasada: eliminar saltos de página duplicados
+        # Recorrer nuevamente para encontrar saltos de página consecutivos
+        i = 0
+        while i < len(self.doc.paragraphs) - 1:
+            para = self.doc.paragraphs[i]
+            next_para = self.doc.paragraphs[i + 1]
+
+            # Verificar si ambos párrafos tienen saltos de página
+            has_break = any(self._has_page_break(run) for run in para.runs)
+            next_has_break = any(self._has_page_break(run) for run in next_para.runs)
+
+            # Verificar si ambos están vacíos
+            is_empty = not para.text.strip()
+            next_is_empty = not next_para.text.strip()
+
+            # Si ambos tienen saltos de página y están vacíos, eliminar el segundo
+            if has_break and next_has_break and is_empty and next_is_empty:
+                try:
+                    p_element = next_para._element
+                    p_element.getparent().remove(p_element)
+                    # No incrementar i, porque eliminamos el siguiente
+                    continue
+                except Exception:
+                    pass
+
+            i += 1
+
     def process_table_of_contents(self):
         """
         Procesa el índice (tabla de contenidos) del documento usando marcadores numéricos.
@@ -977,60 +1093,94 @@ class WordEngine:
         """
         Convierte el documento a PDF y retorna los bytes.
 
-        Nota: Requiere que pandoc esté instalado en el sistema.
-        En Linux: sudo apt-get install pandoc
-        En macOS: brew install pandoc
-        En Windows: descargar de https://pandoc.org/installing.html
+        Utiliza LibreOffice para la conversión, lo que garantiza que:
+        - Las imágenes de fondo se preservan correctamente
+        - Los headers y footers mantienen sus elementos gráficos
+        - El formato general del documento se mantiene intacto
+
+        Nota: Requiere que LibreOffice esté instalado en el sistema.
+        En Linux: sudo apt-get install libreoffice
+        En macOS: brew install libreoffice
+        En Windows: descargar de https://www.libreoffice.org/download/
 
         Returns:
             Bytes del documento en formato PDF
 
         Raises:
-            RuntimeError: Si pandoc no está instalado o hay error en la conversión
+            RuntimeError: Si LibreOffice no está instalado o hay error en la conversión
         """
         import tempfile
         import os
-        try:
-            import pypandoc
-        except ImportError:
+        import subprocess
+        import shutil
+
+        # Verificar si LibreOffice está instalado
+        libreoffice_cmd = None
+        for cmd in ['libreoffice', 'soffice']:
+            if shutil.which(cmd):
+                libreoffice_cmd = cmd
+                break
+
+        if not libreoffice_cmd:
             raise RuntimeError(
-                "pypandoc no está instalado. "
-                "Instálalo con: pip install pypandoc"
+                "LibreOffice no está instalado. "
+                "Instálalo con: sudo apt-get install libreoffice (Linux) o "
+                "brew install libreoffice (macOS)"
             )
 
-        # Crear archivos temporales
-        with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_docx:
-            docx_path = tmp_docx.name
+        # Crear directorio temporal
+        temp_dir = tempfile.mkdtemp()
+
+        try:
+            # Guardar el documento en el directorio temporal
+            docx_path = os.path.join(temp_dir, 'documento.docx')
             self.doc.save(docx_path)
 
-        try:
-            # Convertir DOCX a PDF usando pypandoc
-            pdf_path = docx_path.replace('.docx', '.pdf')
-
-            # pypandoc puede usar varios engines de conversión
-            # Por defecto intenta usar el mejor disponible
-            pypandoc.convert_file(
-                docx_path,
-                'pdf',
-                outputfile=pdf_path,
-                extra_args=['--pdf-engine=xelatex']  # Mejor soporte para caracteres especiales
+            # Convertir DOCX a PDF usando LibreOffice
+            # --headless: ejecutar sin interfaz gráfica
+            # --convert-to pdf: convertir a PDF
+            # --outdir: directorio de salida
+            result = subprocess.run(
+                [
+                    libreoffice_cmd,
+                    '--headless',
+                    '--convert-to',
+                    'pdf',
+                    '--outdir',
+                    temp_dir,
+                    docx_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60  # Timeout de 60 segundos
             )
 
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"LibreOffice falló al convertir el documento: {result.stderr}"
+                )
+
             # Leer el PDF generado
+            pdf_path = os.path.join(temp_dir, 'documento.pdf')
+
+            if not os.path.exists(pdf_path):
+                raise RuntimeError("El archivo PDF no se generó correctamente")
+
             with open(pdf_path, 'rb') as pdf_file:
                 pdf_bytes = pdf_file.read()
 
-            # Limpiar archivos temporales
-            os.unlink(pdf_path)
-
             return pdf_bytes
 
-        except Exception as e:
+        except subprocess.TimeoutExpired:
             raise RuntimeError(
-                f"Error al convertir a PDF: {e}. "
-                "Asegúrate de que pandoc esté instalado en tu sistema."
+                "La conversión a PDF tardó demasiado tiempo. "
+                "Intenta con un documento más pequeño."
             )
+        except Exception as e:
+            raise RuntimeError(f"Error al convertir a PDF: {e}")
         finally:
-            # Limpiar archivo DOCX temporal
-            if os.path.exists(docx_path):
-                os.unlink(docx_path)
+            # Limpiar directorio temporal
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass  # Ignorar errores al limpiar
