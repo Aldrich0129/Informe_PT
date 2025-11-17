@@ -88,6 +88,96 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
                 st.error(f"❌ Error al cargar datos: {e}")
 
         st.divider()
+
+        # Sección de imágenes de fondo
+        st.header("🖼️ Imágenes de Fondo")
+
+        # Directorio de imágenes
+        images_dir = Path(__file__).parent.parent / "config" / "images"
+        images_dir.mkdir(exist_ok=True)
+
+        # Obtener lista de imágenes disponibles
+        available_images = []
+        for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp']:
+            available_images.extend(list(images_dir.glob(ext)))
+
+        image_names = ["Ninguna"] + [img.name for img in available_images]
+
+        # Imagen de primera página
+        st.subheader("Primera página")
+        first_page_option = st.radio(
+            "Fuente de imagen:",
+            options=["Ninguna", "Seleccionar existente", "Subir nueva"],
+            key="first_page_image_source",
+            horizontal=True
+        )
+
+        first_page_image = None
+        if first_page_option == "Seleccionar existente":
+            if len(image_names) > 1:
+                selected = st.selectbox(
+                    "Seleccionar imagen:",
+                    options=image_names[1:],  # Excluir "Ninguna"
+                    key="first_page_image_select"
+                )
+                first_page_image = images_dir / selected
+                st.session_state.first_page_image_path = str(first_page_image)
+            else:
+                st.info("No hay imágenes disponibles. Suba una nueva.")
+        elif first_page_option == "Subir nueva":
+            uploaded_first = st.file_uploader(
+                "Subir imagen para primera página",
+                type=["png", "jpg", "jpeg", "bmp"],
+                key="first_page_upload"
+            )
+            if uploaded_first is not None:
+                # Guardar la imagen en el directorio
+                first_page_image = images_dir / uploaded_first.name
+                with open(first_page_image, 'wb') as f:
+                    f.write(uploaded_first.getbuffer())
+                st.session_state.first_page_image_path = str(first_page_image)
+                st.success(f"✅ Imagen guardada: {uploaded_first.name}")
+        else:
+            st.session_state.first_page_image_path = None
+
+        # Imagen de última página
+        st.subheader("Última página")
+        last_page_option = st.radio(
+            "Fuente de imagen:",
+            options=["Ninguna", "Seleccionar existente", "Subir nueva"],
+            key="last_page_image_source",
+            horizontal=True
+        )
+
+        last_page_image = None
+        if last_page_option == "Seleccionar existente":
+            if len(image_names) > 1:
+                selected = st.selectbox(
+                    "Seleccionar imagen:",
+                    options=image_names[1:],  # Excluir "Ninguna"
+                    key="last_page_image_select"
+                )
+                last_page_image = images_dir / selected
+                st.session_state.last_page_image_path = str(last_page_image)
+            else:
+                st.info("No hay imágenes disponibles. Suba una nueva.")
+        elif last_page_option == "Subir nueva":
+            uploaded_last = st.file_uploader(
+                "Subir imagen para última página",
+                type=["png", "jpg", "jpeg", "bmp"],
+                key="last_page_upload"
+            )
+            if uploaded_last is not None:
+                # Guardar la imagen en el directorio
+                last_page_image = images_dir / uploaded_last.name
+                with open(last_page_image, 'wb') as f:
+                    f.write(uploaded_last.getbuffer())
+                st.session_state.last_page_image_path = str(last_page_image)
+                st.success(f"✅ Imagen guardada: {uploaded_last.name}")
+        else:
+            st.session_state.last_page_image_path = None
+
+        st.divider()
         st.markdown("**Desarrollado con Streamlit + Python-docx**")
 
     # Aplicar datos cargados desde JSON a las keys de los widgets

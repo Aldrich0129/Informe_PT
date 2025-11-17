@@ -557,6 +557,7 @@ class WordEngine:
     def _insert_document_at_marker(self, marker: str, doc_path: Path):
         """
         Inserta el contenido de otro documento en la posición del marcador.
+        Preserva las propiedades de sección (section) incluyendo el diseño de columnas.
 
         Args:
             marker: Marcador donde insertar
@@ -574,6 +575,35 @@ class WordEngine:
                 # Insertar el contenido del documento
                 para_element = paragraph._element
 
+                # Verificar si el documento a insertar tiene configuración de columnas diferente
+                if len(doc_to_insert.sections) > 0:
+                    source_section = doc_to_insert.sections[0]
+
+                    # Intentar obtener la configuración de columnas del documento fuente
+                    try:
+                        source_cols_element = source_section._sectPr.find(
+                            './/{http://schemas.openxmlformats.org/wordprocessingml/2006/main}cols'
+                        )
+
+                        # Si el documento fuente tiene configuración de columnas,
+                        # crear una nueva sección para preservar ese formato
+                        if source_cols_element is not None:
+                            # Insertar un salto de sección continuo antes del contenido
+                            section_break = OxmlElement('w:p')
+                            pPr = OxmlElement('w:pPr')
+                            sectPr = OxmlElement('w:sectPr')
+
+                            # Copiar la configuración de columnas
+                            cols_copy = deepcopy(source_cols_element)
+                            sectPr.append(cols_copy)
+
+                            pPr.append(sectPr)
+                            section_break.append(pPr)
+                            para_element.addprevious(section_break)
+                    except Exception as e:
+                        # Si hay error al copiar columnas, continuar sin ellas
+                        print(f"Advertencia: No se pudo copiar la configuración de columnas: {e}")
+
                 # Copiar párrafos del documento a insertar
                 for insert_para in doc_to_insert.paragraphs:
                     # Crear un nuevo párrafo con el mismo formato
@@ -586,6 +616,30 @@ class WordEngine:
                     new_table = deepcopy(insert_table._element)
                     para_element.addnext(new_table)
                     para_element = new_table
+
+                # Si insertamos contenido con columnas, agregar un salto de sección al final
+                # para restaurar la configuración de columnas original
+                try:
+                    if len(doc_to_insert.sections) > 0:
+                        source_cols_element = doc_to_insert.sections[0]._sectPr.find(
+                            './/{http://schemas.openxmlformats.org/wordprocessingml/2006/main}cols'
+                        )
+                        if source_cols_element is not None:
+                            # Crear párrafo con salto de sección para restaurar formato original
+                            end_section_break = OxmlElement('w:p')
+                            end_pPr = OxmlElement('w:pPr')
+                            end_sectPr = OxmlElement('w:sectPr')
+
+                            # Restaurar a una sola columna (configuración por defecto)
+                            end_cols = OxmlElement('w:cols')
+                            end_cols.set(qn('w:num'), '1')
+                            end_sectPr.append(end_cols)
+
+                            end_pPr.append(end_sectPr)
+                            end_section_break.append(end_pPr)
+                            para_element.addnext(end_section_break)
+                except Exception as e:
+                    print(f"Advertencia: No se pudo restaurar la configuración de columnas: {e}")
 
                 return
 
@@ -1445,3 +1499,119 @@ class WordEngine:
                 shutil.rmtree(temp_dir)
             except Exception:
                 pass  # Ignorar errores al limpiar
+
+    def insert_background_image(self, image_path: Path, page_type: str = "first"):
+        """
+        Inserta una imagen como fondo en la primera o última página del documento.
+        La imagen se ajusta automáticamente al tamaño de la página y se coloca detrás del texto.
+
+        Args:
+            image_path: Ruta a la imagen a insertar
+            page_type: Tipo de página - "first" para primera página, "last" para última página
+        """
+        if not image_path.exists():
+            print(f"Advertencia: Imagen no encontrada: {image_path}")
+            return
+
+        try:
+            # Obtener la sección apropiada
+            if page_type == "first":
+                # Usar la primera sección
+                section = self.doc.sections[0]
+                # Insertar en el primer párrafo
+                target_para = self.doc.paragraphs[0]
+            elif page_type == "last":
+                # Usar la última sección
+                section = self.doc.sections[-1]
+                # Insertar en el último párrafo
+                target_para = self.doc.paragraphs[-1]
+            else:
+                print(f"Advertencia: page_type no válido: {page_type}")
+                return
+
+            # Obtener dimensiones de la página (convertir de EMU a pulgadas)
+            page_width = section.page_width
+            page_height = section.page_height
+
+            # Determinar orientación
+            is_landscape = page_width > page_height
+
+            # Insertar la imagen en un párrafo nuevo al principio/final
+            if page_type == "first":
+                # Insertar al principio
+                new_para = self.doc.paragraphs[0]._element
+                # Crear un nuevo párrafo antes del primero
+                para_element = OxmlElement('w:p')
+                new_para.addprevious(para_element)
+            else:
+                # Insertar al final
+                para_element = target_para._element
+
+            # Agregar la imagen al párrafo
+            # Usar el método interno de python-docx para agregar la imagen
+            # Necesitamos crear un nuevo párrafo en la posición correcta
+            if page_type == "first":
+                # Insertar al principio del documento
+                run = self.doc.paragraphs[0].insert_paragraph_before().add_run()
+            else:
+                # Insertar al final del documento
+                run = self.doc.add_paragraph().add_run()
+
+            # Agregar la imagen con el tamaño de la página
+            picture = run.add_picture(str(image_path), width=page_width, height=page_height)
+
+            # Configurar la imagen para que esté detrás del texto
+            # Acceder al elemento XML de la imagen
+            inline = run._element.xpath('.//wp:inline')
+            if inline:
+                inline_element = inline[0]
+
+                # Convertir inline a anchor (necesario para posicionamiento detrás del texto)
+                # Crear un nuevo elemento anchor
+                anchor = OxmlElement('wp:anchor')
+
+                # Copiar atributos importantes
+                for attr in ['distT', 'distB', 'distL', 'distR', 'simplePos', 'relativeHeight',
+                           'behindDoc', 'locked', 'layoutInCell', 'allowOverlap']:
+                    anchor.set(attr, '0')
+
+                # Configurar para estar detrás del texto
+                anchor.set('behindDoc', '1')
+                anchor.set('allowOverlap', '1')
+
+                # Copiar el contenido del inline al anchor
+                for child in list(inline_element):
+                    anchor.append(child)
+
+                # Configurar posicionamiento
+                # Simple pos
+                simple_pos = OxmlElement('wp:simplePos')
+                simple_pos.set('x', '0')
+                simple_pos.set('y', '0')
+                anchor.insert(0, simple_pos)
+
+                # Position H (horizontal)
+                position_h = OxmlElement('wp:positionH')
+                position_h.set('relativeFrom', 'page')
+                align_h = OxmlElement('wp:align')
+                align_h.text = 'center'
+                position_h.append(align_h)
+                anchor.append(position_h)
+
+                # Position V (vertical)
+                position_v = OxmlElement('wp:positionV')
+                position_v.set('relativeFrom', 'page')
+                align_v = OxmlElement('wp:align')
+                align_v.text = 'center'
+                position_v.append(align_v)
+                anchor.append(position_v)
+
+                # Reemplazar inline con anchor
+                inline_element.getparent().replace(inline_element, anchor)
+
+            print(f"Imagen de fondo insertada en página {page_type}: {image_path.name}")
+
+        except Exception as e:
+            print(f"Error al insertar imagen de fondo: {e}")
+            import traceback
+            traceback.print_exc()

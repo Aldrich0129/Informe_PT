@@ -114,6 +114,19 @@ def main():
                 # 12. Preservar headers y footers (verificación final)
                 engine.preserve_headers_and_footers()
 
+                # 12.5 Insertar imágenes de fondo si están configuradas
+                first_page_image_path = st.session_state.get("first_page_image_path")
+                if first_page_image_path:
+                    img_path = Path(first_page_image_path)
+                    if img_path.exists():
+                        engine.insert_background_image(img_path, page_type="first")
+
+                last_page_image_path = st.session_state.get("last_page_image_path")
+                if last_page_image_path:
+                    img_path = Path(last_page_image_path)
+                    if img_path.exists():
+                        engine.insert_background_image(img_path, page_type="last")
+
                 # 13. Obtener el documento como bytes
                 doc_bytes = engine.get_document_bytes()
 
