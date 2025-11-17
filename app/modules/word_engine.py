@@ -674,6 +674,21 @@ class WordEngine:
 
         return False
 
+    def _paragraph_has_section_break(self, paragraph) -> bool:
+        """
+        Verifica si un párrafo contiene configuración de sección (sectPr),
+        lo que normalmente incluye saltos de sección y definición de columnas.
+
+        Args:
+            paragraph: Párrafo de python-docx
+
+        Returns:
+            True si el párrafo contiene sectPr, False en caso contrario
+        """
+        # No crear elementos adicionales: solo inspeccionar el XML existente
+        sect_pr = paragraph._p.xpath('./w:pPr/w:sectPr')
+        return bool(sect_pr)
+
     def clean_unused_markers(self):
         """
         Limpia todos los marcadores no utilizados del documento.
@@ -689,6 +704,11 @@ class WordEngine:
         paragraphs_to_delete = []
         for i, paragraph in enumerate(self.doc.paragraphs):
             if marker_pattern.search(paragraph.text):
+                # Proteger cualquier párrafo que cargue configuración de sección
+                if self._paragraph_has_section_break(paragraph):
+                    paragraph.text = marker_pattern.sub('', paragraph.text)
+                    continue
+
                 # IMPORTANTE: Verificar si el párrafo contiene imágenes o dibujos
                 # Si tiene imágenes, NUNCA eliminarlo, solo limpiar el marcador
                 if self._has_drawing_or_image(paragraph):
@@ -855,6 +875,17 @@ class WordEngine:
         while i < len(self.doc.paragraphs):
             para = self.doc.paragraphs[i]
 
+            # Nunca marcar para eliminación el primer o último párrafo del documento;
+            # suelen pertenecer a portadas o cierres con fondos e imágenes a página completa.
+            if i == 0 or i == len(self.doc.paragraphs) - 1:
+                i += 1
+                continue
+
+            # Nunca eliminar párrafos que contengan definición de sección/columnas
+            if self._paragraph_has_section_break(para):
+                i += 1
+                continue
+
             # IMPORTANTE: Si el párrafo contiene imágenes o dibujos, NUNCA eliminarlo
             if self._has_drawing_or_image(para):
                 i += 1
@@ -953,6 +984,11 @@ class WordEngine:
             para = self.doc.paragraphs[i]
             next_para = self.doc.paragraphs[i + 1]
 
+            # Proteger cualquier párrafo con saltos de sección
+            if self._paragraph_has_section_break(para) or self._paragraph_has_section_break(next_para):
+                i += 1
+                continue
+
             # IMPORTANTE: Si alguno de los dos tiene imágenes, no eliminar
             if self._has_drawing_or_image(para) or self._has_drawing_or_image(next_para):
                 i += 1
@@ -1004,6 +1040,10 @@ class WordEngine:
                 while j < len(self.doc.paragraphs):
                     next_para = self.doc.paragraphs[j]
 
+                    # No eliminar si define columnas o una nueva sección
+                    if self._paragraph_has_section_break(next_para):
+                        break
+
                     # IMPORTANTE: No eliminar si tiene imágenes
                     if self._has_drawing_or_image(next_para):
                         break
@@ -1026,6 +1066,10 @@ class WordEngine:
 
             # IMPORTANTE: No eliminar si tiene imágenes
             if self._has_drawing_or_image(para):
+                break
+
+            # Conservar los párrafos que traigan configuración de sección/columnas
+            if self._paragraph_has_section_break(para):
                 break
 
             # Si encontramos un párrafo vacío al inicio, marcarlo
@@ -1382,22 +1426,47 @@ class WordEngine:
         import subprocess
         import shutil
 
-        # Opción 1: Intentar con LibreOffice (mejor opción)
-        libreoffice_cmd = None
-        for cmd in ['libreoffice', 'soffice']:
-            if shutil.which(cmd):
-                libreoffice_cmd = cmd
-                break
+        temp_dir = tempfile.mkdtemp()
 
-        if libreoffice_cmd:
-            # Usar LibreOffice para la conversión
-            temp_dir = tempfile.mkdtemp()
+        try:
+            # Guardar el documento en el directorio temporal
+            docx_path = os.path.join(temp_dir, 'documento.docx')
+            self.doc.save(docx_path)
 
+            # Opción 0: Intentar con pypandoc descargando binarios automáticamente (evita instalaciones manuales)
             try:
-                # Guardar el documento en el directorio temporal
-                docx_path = os.path.join(temp_dir, 'documento.docx')
-                self.doc.save(docx_path)
+                import pypandoc
 
+                try:
+                    pypandoc.get_pandoc_path()
+                except OSError:
+                    # Descargar pandoc de forma automática si no está disponible
+                    pypandoc.download_pandoc()
+
+                pdf_path = os.path.join(temp_dir, 'documento.pdf')
+                pypandoc.convert_file(
+                    docx_path,
+                    'pdf',
+                    outputfile=pdf_path,
+                    extra_args=['--pdf-engine=weasyprint']
+                )
+
+                if os.path.exists(pdf_path):
+                    with open(pdf_path, 'rb') as pdf_file:
+                        pdf_bytes = pdf_file.read()
+                    return pdf_bytes
+            except Exception as pandoc_error:
+                # Continuar con otras estrategias sin forzar instalaciones del sistema
+                print(f"Advertencia: pypandoc no pudo convertir a PDF: {pandoc_error}")
+
+            # Opción 1: Intentar con LibreOffice (mejor opción)
+            libreoffice_cmd = None
+            for cmd in ['libreoffice', 'soffice']:
+                if shutil.which(cmd):
+                    libreoffice_cmd = cmd
+                    break
+
+            if libreoffice_cmd:
                 # Convertir DOCX a PDF usando LibreOffice
                 result = subprocess.run(
                     [
@@ -1430,67 +1499,59 @@ class WordEngine:
 
                 return pdf_bytes
 
-            except subprocess.TimeoutExpired:
-                raise RuntimeError(
-                    "La conversión a PDF tardó demasiado tiempo. "
-                    "Intenta con un documento más pequeño."
-                )
-            except Exception as e:
-                raise RuntimeError(f"Error al convertir a PDF con LibreOffice: {e}")
-            finally:
-                # Limpiar directorio temporal
-                try:
-                    shutil.rmtree(temp_dir)
-                except Exception:
-                    pass
-
-        # Opción 2: Intentar con docx2pdf (si está instalado)
-        try:
-            import docx2pdf
-            temp_dir = tempfile.mkdtemp()
-
+            # Opción 2: Intentar con docx2pdf (si está instalado)
             try:
-                # Guardar el documento
-                docx_path = os.path.join(temp_dir, 'documento.docx')
-                pdf_path = os.path.join(temp_dir, 'documento.pdf')
-                self.doc.save(docx_path)
+                import docx2pdf
+                temp_dir_docx2pdf = tempfile.mkdtemp()
 
-                # Convertir usando docx2pdf
-                docx2pdf.convert(docx_path, pdf_path)
-
-                # Leer el PDF generado
-                if os.path.exists(pdf_path):
-                    with open(pdf_path, 'rb') as pdf_file:
-                        pdf_bytes = pdf_file.read()
-                    return pdf_bytes
-                else:
-                    raise RuntimeError("docx2pdf no generó el archivo PDF")
-
-            finally:
-                # Limpiar directorio temporal
                 try:
-                    shutil.rmtree(temp_dir)
-                except Exception:
-                    pass
+                    # Guardar el documento
+                    docx_path_alt = os.path.join(temp_dir_docx2pdf, 'documento.docx')
+                    pdf_path = os.path.join(temp_dir_docx2pdf, 'documento.pdf')
+                    self.doc.save(docx_path_alt)
 
-        except ImportError:
-            pass  # docx2pdf no está instalado
-        except Exception as e:
-            # Si docx2pdf falla, continuar al mensaje de error final
-            print(f"Advertencia: docx2pdf falló: {e}")
+                    # Convertir usando docx2pdf
+                    docx2pdf.convert(docx_path_alt, pdf_path)
 
-        # Si llegamos aquí, ninguna opción funcionó
-        raise RuntimeError(
-            "No se encontró ninguna herramienta para convertir a PDF.\n\n"
-            "Para exportar a PDF, instala LibreOffice:\n"
-            "• Linux: sudo apt-get install libreoffice\n"
-            "• macOS: brew install libreoffice\n"
-            "• Windows: Descarga de https://www.libreoffice.org/download/\n\n"
-            "Alternativamente, puedes:\n"
-            "1. Descargar el archivo Word (.docx)\n"
-            "2. Abrirlo en Microsoft Word o LibreOffice\n"
-            "3. Guardar como PDF desde allí"
-        )
+                    # Leer el PDF generado
+                    if os.path.exists(pdf_path):
+                        with open(pdf_path, 'rb') as pdf_file:
+                            pdf_bytes = pdf_file.read()
+                        return pdf_bytes
+                    else:
+                        raise RuntimeError("docx2pdf no generó el archivo PDF")
+
+                finally:
+                    # Limpiar directorio temporal
+                    try:
+                        shutil.rmtree(temp_dir_docx2pdf)
+                    except Exception:
+                        pass
+
+            except ImportError:
+                pass  # docx2pdf no está instalado
+            except Exception as e:
+                # Si docx2pdf falla, continuar al mensaje de error final
+                print(f"Advertencia: docx2pdf falló: {e}")
+
+            # Si llegamos aquí, ninguna opción funcionó
+            raise RuntimeError(
+                "No se encontró ninguna herramienta para convertir a PDF.\n\n"
+                "Para exportar a PDF, instala LibreOffice:\n"
+                "• Linux: sudo apt-get install libreoffice\n"
+                "• macOS: brew install libreoffice\n"
+                "• Windows: Descarga de https://www.libreoffice.org/download/\n\n"
+                "Alternativamente, puedes:\n"
+                "1. Descargar el archivo Word (.docx)\n"
+                "2. Abrirlo en Microsoft Word o LibreOffice\n"
+                "3. Guardar como PDF desde allí"
+            )
+        finally:
+            # Limpiar el directorio temporal principal creado al inicio
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
 
     def insert_background_image(self, image_path: Path, page_type: str = "first"):
         """
