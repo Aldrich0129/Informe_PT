@@ -104,10 +104,13 @@ def main():
                 engine.clean_unused_markers()
                 engine.clean_empty_paragraphs()
 
-                # 9. Obtener el documento como bytes
+                # 10. Eliminar páginas vacías del documento
+                engine.remove_empty_pages()
+
+                # 11. Obtener el documento como bytes
                 doc_bytes = engine.get_document_bytes()
 
-                # 10. Mostrar botón de descarga
+                # 12. Mostrar botón de descarga
                 show_success_message()
 
                 nombre_empresa = simple_inputs.get("nombre_compania", "Empresa")
