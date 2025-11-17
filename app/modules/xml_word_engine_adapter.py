@@ -332,8 +332,13 @@ class XMLWordEngineAdapter:
             self._remove_marker_from_paragraph(target_para, marker)
 
             # Si el párrafo quedó vacío después de limpiar el marcador, eliminarlo
+            # únicamente cuando no contiene propiedades de sección. Estos párrafos
+            # suelen guardar la configuración de columnas del documento y removerlos
+            # rompe el diseño de doble columna.
             para_text_after = self._get_paragraph_text(target_para).strip()
-            if not para_text_after:
+            has_section = self._paragraph_has_section_break_xml(target_para)
+
+            if (not para_text_after) and (not has_section):
                 parent.remove(target_para)
 
         finally:
@@ -829,14 +834,19 @@ class XMLWordEngineAdapter:
         body = self.root.find(f'.//{{{self.w_ns}}}body')
         if body is None:
             return
-        
+
         paras_to_remove = []
         for para in body.findall(f'{{{self.w_ns}}}p'):
             text = self._get_paragraph_text(para)
             if not text.strip():
                 # Verificar que no tiene imágenes
                 has_drawing = para.find(f'.//{{{self.w_ns}}}drawing') is not None
-                if not has_drawing:
+                # No eliminar párrafos que contengan propiedades de sección, ya que
+                # suelen almacenar configuraciones de columnas/márgenes que deben
+                # preservarse para mantener el diseño del documento.
+                has_section = self._paragraph_has_section_break_xml(para)
+
+                if not has_drawing and not has_section:
                     paras_to_remove.append(para)
         
         for para in paras_to_remove:
