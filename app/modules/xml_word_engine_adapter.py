@@ -108,14 +108,25 @@ class XMLWordEngineAdapter:
         
         # Crear tabla XML
         table_elem = self._create_table_xml(table_data, format_config)
-        
+
         # Insertar tabla
         parent = target_para.getparent()
         para_pos = list(parent).index(target_para)
         parent.insert(para_pos + 1, table_elem)
-        
+
+        # Insertar un párrafo de separación después de la tabla para evitar que
+        # quede pegada al contenido siguiente
+        spacer_para = self._create_spacing_paragraph()
+        parent.insert(para_pos + 2, spacer_para)
+
         # Limpiar marcador
         self._remove_marker_from_paragraph(target_para, marker)
+
+        # Si el párrafo quedó vacío tras eliminar el marcador, dejar un espacio
+        # no separable para preservar el espaciado y evitar que se elimine en la
+        # fase de limpieza
+        if not self._get_paragraph_text(target_para).strip():
+            self._set_paragraph_text(target_para, '\u00A0')
     
     def _create_table_xml(self, table_data: dict, format_config: dict = None) -> etree.Element:
         """Crea elemento de tabla XML con formato."""
@@ -256,6 +267,15 @@ class XMLWordEngineAdapter:
             t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
         
         return tr
+
+    def _create_spacing_paragraph(self) -> etree.Element:
+        """Crea un párrafo con un espacio no separable para usar como separador."""
+        para = etree.Element(f'{{{self.w_ns}}}p')
+        run = etree.SubElement(para, f'{{{self.w_ns}}}r')
+        text = etree.SubElement(run, f'{{{self.w_ns}}}t')
+        text.text = '\u00A0'
+        text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        return para
     
     def insert_conditional_blocks(self, docs_to_insert: list, config_dir: Path):
         """Inserta bloques condicionales desde archivos Word."""
@@ -580,7 +600,7 @@ class XMLWordEngineAdapter:
         Returns:
             Número de página donde se encuentra el marcador, o None si no se encuentra
         """
-        page_count = 1
+        page_count = self._calculate_page_count_until_idx(all_paras, start_search_idx)
 
         for i in range(start_search_idx + 1, len(all_paras)):
             para = all_paras[i]
@@ -604,6 +624,19 @@ class XMLWordEngineAdapter:
             if text_elem.text and marker_pattern.search(text_elem.text):
                 text_elem.text = marker_pattern.sub('', text_elem.text)
 
+    def _calculate_page_count_until_idx(self, all_paras: list, end_idx: int) -> int:
+        """Calcula el número de página acumulado hasta un índice de párrafo dado."""
+        page_count = 1
+
+        if end_idx is None:
+            return page_count
+
+        for i in range(0, min(end_idx + 1, len(all_paras))):
+            if self._has_page_break_xml(all_paras[i]):
+                page_count += 1
+
+        return page_count
+
     def _has_page_break_xml(self, para: etree.Element) -> bool:
         """
         Verifica si un párrafo contiene un salto de página.
@@ -614,6 +647,13 @@ class XMLWordEngineAdapter:
         Returns:
             True si el párrafo contiene un salto de página, False en caso contrario
         """
+        # Considerar saltos de página explícitos
+        if self._paragraph_has_section_page_break(para):
+            return True
+
+        if para.find(f'.//{{{self.w_ns}}}lastRenderedPageBreak') is not None:
+            return True
+
         # Buscar elementos de salto de página (w:br con w:type="page")
         for br in para.findall(f'.//{{{self.w_ns}}}br'):
             break_type = br.get(f'{{{self.w_ns}}}type')
@@ -797,6 +837,22 @@ class XMLWordEngineAdapter:
             if sectPr is not None:
                 return True
         return False
+
+    def _paragraph_has_section_page_break(self, para: etree.Element) -> bool:
+        """Detecta si una sección obliga a iniciar una nueva página."""
+        pPr = para.find(f'{{{self.w_ns}}}pPr')
+        if pPr is None:
+            return False
+
+        sectPr = pPr.find(f'{{{self.w_ns}}}sectPr')
+        if sectPr is None:
+            return False
+
+        type_elem = sectPr.find(f'{{{self.w_ns}}}type')
+        type_val = type_elem.get(f'{{{self.w_ns}}}val') if type_elem is not None else None
+
+        # Considerar como salto de página todo lo que no sea continuo
+        return type_val in (None, 'nextPage', 'evenPage', 'oddPage')
 
     def _has_drawing_or_image_xml(self, para: etree.Element) -> bool:
         """
