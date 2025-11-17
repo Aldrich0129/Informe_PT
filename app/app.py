@@ -14,7 +14,7 @@ import streamlit as st
 from modules.config_loader import ConfigLoader
 from modules.utils import build_full_context, validate_inputs
 from modules.tables import TableBuilder
-from modules.word_engine import WordEngine
+from modules.xml_word_engine_adapter import XMLWordEngineAdapter as WordEngine
 from modules.simple_vars import validate_simple_vars
 from modules.conditions import validate_conditions
 from ui.main_ui import (
