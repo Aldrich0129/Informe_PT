@@ -57,6 +57,11 @@ class XMLWordEngineAdapter:
         # Contadores para debug
         self._initial_drawings = len(self.root.findall(f'.//{{{self.w_ns}}}drawing'))
         self._initial_sections = len(self.root.findall(f'.//{{{self.w_ns}}}sectPr'))
+
+        # Configuraciones especiales para tablas específicas
+        self.special_table_behaviors = {
+            "<<Tabla de cumplimiento formal MF>>": {"column_break_before": True}
+        }
     
     def replace_variables(self, context: dict):
         """Reemplaza variables <<marcador>> en el documento."""
@@ -102,10 +107,13 @@ class XMLWordEngineAdapter:
             if marker in para_text:
                 target_para = para
                 break
-        
+
         if target_para is None:
             return
-        
+
+        # Aplicar comportamientos especiales antes de insertar la tabla
+        self._apply_pre_table_behavior(marker, target_para)
+
         # Crear tabla XML
         table_elem = self._create_table_xml(table_data, format_config)
 
@@ -127,6 +135,29 @@ class XMLWordEngineAdapter:
         # fase de limpieza
         if not self._get_paragraph_text(target_para).strip():
             self._set_paragraph_text(target_para, '\u00A0')
+
+    def _apply_pre_table_behavior(self, marker: str, target_para: etree.Element):
+        """Aplica comportamientos especiales antes de insertar ciertas tablas."""
+        behavior = self.special_table_behaviors.get(marker)
+        if not behavior:
+            return
+
+        if behavior.get("column_break_before"):
+            self._insert_column_break_before_paragraph(target_para)
+
+    def _insert_column_break_before_paragraph(self, para: etree.Element):
+        """Inserta un salto de columna antes de un párrafo determinado."""
+        parent = para.getparent()
+        if parent is None:
+            return
+
+        column_break_para = etree.Element(f'{{{self.w_ns}}}p')
+        run = etree.SubElement(column_break_para, f'{{{self.w_ns}}}r')
+        br = etree.SubElement(run, f'{{{self.w_ns}}}br')
+        br.set(f'{{{self.w_ns}}}type', 'column')
+
+        para_index = list(parent).index(para)
+        parent.insert(para_index, column_break_para)
     
     def _create_table_xml(self, table_data: dict, format_config: dict = None) -> etree.Element:
         """Crea elemento de tabla XML con formato."""
@@ -364,6 +395,14 @@ class XMLWordEngineAdapter:
         finally:
             shutil.rmtree(block_temp, ignore_errors=True)
 
+    def remove_discrepancias_formales_section(self):
+        """Elimina títulos y entradas del índice de Discrepancias formales."""
+        targets = [
+            "Anexo IV – Discrepancias formales",
+            "Anexo IV - Discrepancias formales"
+        ]
+        self._remove_paragraphs_containing_text(targets)
+
     def _remove_section_properties_from_element(self, elem: etree.Element):
         """
         Remueve recursivamente todas las propiedades de sección (sectPr) de un elemento.
@@ -388,6 +427,26 @@ class XMLWordEngineAdapter:
             parent = sectPr.getparent()
             if parent is not None:
                 parent.remove(sectPr)
+
+    def _remove_paragraphs_containing_text(self, targets: List[str]):
+        """Elimina párrafos cuyo texto contiene cualquiera de los objetivos dados."""
+        if not targets:
+            return
+
+        body = self.root.find(f'.//{{{self.w_ns}}}body')
+        if body is None:
+            return
+
+        paras_to_remove = []
+        for para in body.findall(f'.//{{{self.w_ns}}}p'):
+            text = self._get_paragraph_text(para)
+            if any(target in text for target in targets):
+                paras_to_remove.append(para)
+
+        for para in paras_to_remove:
+            parent = para.getparent()
+            if parent is not None:
+                parent.remove(para)
     
     # Métodos simplificados/stub para compatibilidad
     def process_salto_markers(self):
@@ -894,7 +953,10 @@ class XMLWordEngineAdapter:
         paras_to_remove = []
         for para in body.findall(f'{{{self.w_ns}}}p'):
             text = self._get_paragraph_text(para)
-            if not text.strip():
+            normalized_text = text.replace('\u00A0', '')
+            if not normalized_text.strip():
+                if '\u00A0' in text:
+                    continue  # Preservar párrafos separadores con espacios duros
                 # Verificar que no tiene imágenes
                 has_drawing = para.find(f'.//{{{self.w_ns}}}drawing') is not None
                 # No eliminar párrafos que contengan propiedades de sección, ya que

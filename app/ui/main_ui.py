@@ -4,6 +4,7 @@ UI principal que orquesta todas las secciones de la aplicación.
 import streamlit as st
 from pathlib import Path
 import json
+import hashlib
 
 from ui.sections_simple_vars import render_simple_vars_section
 from ui.sections_conditions import render_conditions_section
@@ -67,25 +68,39 @@ def render_main_ui(cfg_simple: dict, cfg_cond: dict, cfg_tab: dict):
         uploaded_file = st.file_uploader(
             "Cargar datos guardados",
             type=["json"],
-            help="Carga un archivo JSON con datos previamente guardados"
+            help="Carga un archivo JSON con datos previamente guardados",
+            key="json_data_uploader"
         )
 
         if uploaded_file is not None:
             try:
-                data = json.load(uploaded_file)
-                simple_inputs_loaded, condition_inputs_loaded, table_inputs_loaded, table_format_loaded = import_data_from_json(data)
+                file_bytes = uploaded_file.getvalue()
+                file_signature = hashlib.md5(file_bytes).hexdigest()
 
-                # Guardar en session_state
-                st.session_state.loaded_simple_inputs = simple_inputs_loaded
-                st.session_state.loaded_condition_inputs = condition_inputs_loaded
-                st.session_state.loaded_table_inputs = table_inputs_loaded
-                st.session_state.loaded_table_format = table_format_loaded
-                st.session_state.data_loaded = True
+                if st.session_state.get("last_loaded_json_signature") == file_signature:
+                    st.info("📁 Este archivo ya fue importado en la sesión actual.")
+                else:
+                    data = json.loads(file_bytes.decode("utf-8"))
+                    (
+                        simple_inputs_loaded,
+                        condition_inputs_loaded,
+                        table_inputs_loaded,
+                        table_format_loaded
+                    ) = import_data_from_json(data)
 
-                st.success("✅ Datos cargados correctamente")
-                st.rerun()
+                    # Guardar en session_state
+                    st.session_state.loaded_simple_inputs = simple_inputs_loaded
+                    st.session_state.loaded_condition_inputs = condition_inputs_loaded
+                    st.session_state.loaded_table_inputs = table_inputs_loaded
+                    st.session_state.loaded_table_format = table_format_loaded
+                    st.session_state.data_loaded = True
+                    st.session_state.last_loaded_json_signature = file_signature
+
+                    st.success("✅ Datos cargados correctamente")
             except Exception as e:
                 st.error(f"❌ Error al cargar datos: {e}")
+        else:
+            st.session_state.pop("last_loaded_json_signature", None)
 
         st.divider()
 

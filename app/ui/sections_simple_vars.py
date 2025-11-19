@@ -43,16 +43,30 @@ def render_simple_vars_section(cfg_simple: dict) -> dict:
         except:
             pass
 
-    # Renderizar ejercicio_corto con valor por defecto
+    # Flags para campos dependientes del ejercicio
+    if "ejercicio_corto_manual" not in st.session_state:
+        st.session_state.ejercicio_corto_manual = False
+    if "ejercicio_anterior_manual" not in st.session_state:
+        st.session_state.ejercicio_anterior_manual = False
+
+    # Renderizar ejercicio_corto sincronizado con session_state para evitar conflictos
+    ejercicio_corto_key = "simple_ejercicio_corto"
+    if ejercicio_corto_key not in st.session_state:
+        st.session_state[ejercicio_corto_key] = year2 or ""
+    elif year2 and not st.session_state.get("ejercicio_corto_manual"):
+        st.session_state[ejercicio_corto_key] = year2
+
     ejercicio_corto_value = st.text_input(
         "Ejercicio corto (abreviado, p.ej. 2025)",
-        key="simple_ejercicio_corto",
-        value=year2 if year2 and not st.session_state.get("ejercicio_corto_manual") else st.session_state.get("simple_ejercicio_corto", year2 or ""),
+        key=ejercicio_corto_key,
         help="Se rellena automáticamente con el segundo año del ejercicio completo, pero puedes cambiarlo"
     )
-    # Detectar si el usuario cambió manualmente el valor
-    if ejercicio_corto_value != year2 and year2:
-        st.session_state.ejercicio_corto_manual = True
+
+    if year2:
+        st.session_state.ejercicio_corto_manual = ejercicio_corto_value != year2
+    else:
+        st.session_state.ejercicio_corto_manual = False
+
     inputs["ejercicio_corto"] = ejercicio_corto_value
 
     # Procesar otras variables de datos generales (excluyendo ejercicio_completo, ejercicio_corto, ejercicio_anterior)
@@ -68,15 +82,23 @@ def render_simple_vars_section(cfg_simple: dict) -> dict:
 
         # Lógica especial para ejercicio_anterior (se procesa después de ejercicio_completo)
         if var_id == "ejercicio_anterior":
+            ejercicio_anterior_key = "simple_ejercicio_anterior"
+            if ejercicio_anterior_key not in st.session_state:
+                st.session_state[ejercicio_anterior_key] = year1 or ""
+            elif year1 and not st.session_state.get("ejercicio_anterior_manual"):
+                st.session_state[ejercicio_anterior_key] = year1
+
             ejercicio_anterior_value = st.text_input(
                 label,
-                key="simple_ejercicio_anterior",
-                value=year1 if year1 and not st.session_state.get("ejercicio_anterior_manual") else st.session_state.get("simple_ejercicio_anterior", year1 or ""),
+                key=ejercicio_anterior_key,
                 help="Se rellena automáticamente con el primer año del ejercicio completo, pero puedes cambiarlo"
             )
-            # Detectar si el usuario cambió manualmente el valor
-            if ejercicio_anterior_value != year1 and year1:
-                st.session_state.ejercicio_anterior_manual = True
+
+            if year1:
+                st.session_state.ejercicio_anterior_manual = ejercicio_anterior_value != year1
+            else:
+                st.session_state.ejercicio_anterior_manual = False
+
             inputs[var_id] = ejercicio_anterior_value
 
         # Renderizar según el tipo normal

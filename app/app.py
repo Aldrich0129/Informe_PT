@@ -94,6 +94,10 @@ def main():
                 # 6. Insertar bloques condicionales
                 engine.insert_conditional_blocks(docs_to_insert, config_dir)
 
+                # 6.1. Eliminar secciones específicas cuando la condición es "No"
+                if condition_inputs.get("desarrollo_discrepancias_formales", "No") != "Sí":
+                    engine.remove_discrepancias_formales_section()
+
                 # 7. Procesar marcadores {salto}
                 engine.process_salto_markers()
 
