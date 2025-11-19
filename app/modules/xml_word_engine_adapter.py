@@ -53,6 +53,7 @@ class XMLWordEngineAdapter:
         # Namespaces
         self.ns = self.root.nsmap
         self.w_ns = self.ns.get('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
+        self.xml_ns = 'http://www.w3.org/XML/1998/namespace'
         
         # Contadores para debug
         self._initial_drawings = len(self.root.findall(f'.//{{{self.w_ns}}}drawing'))
@@ -64,25 +65,29 @@ class XMLWordEngineAdapter:
         }
     
     def replace_variables(self, context: dict):
-        """Reemplaza variables <<marcador>> en el documento."""
-        context_filtered = {k: v for k, v in context.items() 
-                           if v is not None and v != "" and str(v).strip()}
-        
+        """Reemplaza variables <<marcador>> incluso cuando se dividen en múltiples runs."""
+        context_filtered = {
+            k: v for k, v in context.items()
+            if v is not None and v != "" and str(v).strip()
+        }
+
         if not context_filtered:
             return
-        
-        # Reemplazar en todos los elementos de texto
-        for text_elem in self.root.findall(f'.//{{{self.w_ns}}}t'):
-            if text_elem.text:
-                original_text = text_elem.text
-                modified_text = original_text
-                
-                for marker, value in context_filtered.items():
-                    if marker in modified_text:
-                        modified_text = modified_text.replace(marker, str(value))
-                
-                if modified_text != original_text:
-                    text_elem.text = modified_text
+
+        paragraphs = self.root.findall(f'.//{{{self.w_ns}}}p')
+
+        for para in paragraphs:
+            para_text = self._get_paragraph_text(para)
+
+            if not para_text:
+                continue
+
+            for marker, value in context_filtered.items():
+                value_str = str(value)
+
+                while marker in para_text:
+                    self._replace_marker_in_paragraph_xml(para, marker, value_str)
+                    para_text = self._get_paragraph_text(para)
     
     def insert_tables(self, tables_data: dict, cfg_tab: dict, table_format_config: dict = None):
         """
@@ -585,26 +590,30 @@ class XMLWordEngineAdapter:
             if marker in marker_to_page:
                 page_num = marker_to_page[marker]
 
-                # Eliminar cualquier número de página existente al final
                 clean_title = re.sub(r'[\.\s]+\d+$', '', title).strip()
-
-                # Calcular el número de puntos necesarios
                 dots_length = max(3, 80 - len(clean_title) - len(str(page_num)) - 2)
                 dots = '.' * dots_length
 
-                # Actualizar el texto del párrafo
                 new_text = f"{clean_title} {dots} {page_num}"
                 self._set_paragraph_text(para, new_text)
             else:
-                # Si no se encontró el marcador, al menos limpiar el marcador del título
-                self._set_paragraph_text(para, title)
+                # Entrada sin página -> eliminar del índice
+                self._remove_paragraph(para)
 
         # Fase 4: Eliminar todos los marcadores numéricos del documento
         self._remove_numeric_markers_xml()
 
         # Eliminar los marcadores <<Indice>> y <<fin Indice>>
-        self._remove_marker_from_paragraph(all_paras[toc_start_idx], "<<Indice>>")
-        self._remove_marker_from_paragraph(all_paras[toc_end_idx], "<<fin Indice>>")
+        start_para = all_paras[toc_start_idx]
+        end_para = all_paras[toc_end_idx]
+
+        self._remove_marker_from_paragraph(start_para, "<<Indice>>")
+        if not self._get_paragraph_text(start_para).strip():
+            self._remove_paragraph(start_para)
+
+        self._remove_marker_from_paragraph(end_para, "<<fin Indice>>")
+        if not self._get_paragraph_text(end_para).strip():
+            self._remove_paragraph(end_para)
 
         # Asegurar que el índice empiece en una nueva página
         if toc_start_idx > 0:
@@ -747,8 +756,7 @@ class XMLWordEngineAdapter:
 
         if text_elems:
             # Actualizar el primer elemento de texto
-            text_elems[0].text = new_text
-            text_elems[0].set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            self._set_text_with_preserve(text_elems[0], new_text)
 
             # Eliminar otros elementos de texto
             for text_elem in text_elems[1:]:
@@ -763,8 +771,7 @@ class XMLWordEngineAdapter:
                 run = etree.SubElement(para, f'{{{self.w_ns}}}r')
 
             text_elem = etree.SubElement(run, f'{{{self.w_ns}}}t')
-            text_elem.text = new_text
-            text_elem.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            self._set_text_with_preserve(text_elem, new_text)
 
     def clean_unused_markers(self):
         """
@@ -989,12 +996,110 @@ class XMLWordEngineAdapter:
             if text_elem.text:
                 texts.append(text_elem.text)
         return ''.join(texts)
-    
+
     def _remove_marker_from_paragraph(self, para: etree.Element, marker: str):
-        """Elimina marcador de un párrafo."""
+        """Elimina todas las instancias de un marcador en un párrafo."""
+        if para is None or not marker:
+            return
+
+        para_text = self._get_paragraph_text(para)
+
+        while marker in para_text:
+            self._replace_marker_in_paragraph_xml(para, marker, '')
+            para_text = self._get_paragraph_text(para)
+
+    def _replace_marker_in_paragraph_xml(self, para: etree.Element, marker: str, value: str):
+        """Reemplaza un marcador dentro de un párrafo preservando los runs existentes."""
+        text_nodes = []
+        current_pos = 0
+
         for text_elem in para.findall(f'.//{{{self.w_ns}}}t'):
-            if text_elem.text and marker in text_elem.text:
-                text_elem.text = text_elem.text.replace(marker, '')
+            text = text_elem.text or ''
+            start = current_pos
+            end = start + len(text)
+            text_nodes.append({'element': text_elem, 'text': text, 'start': start, 'end': end})
+            current_pos = end
+
+        if not text_nodes:
+            return
+
+        full_text = ''.join(node['text'] for node in text_nodes)
+
+        if marker not in full_text:
+            return
+
+        marker_start = full_text.index(marker)
+        marker_end = marker_start + len(marker)
+        inserted = False
+        value = value or ''
+
+        for node in text_nodes:
+            text_elem = node['element']
+            text = node['text']
+            start = node['start']
+            end = node['end']
+
+            if end <= marker_start or start >= marker_end:
+                # Nodo fuera del marcador
+                continue
+
+            before = ''
+            after = ''
+
+            if start < marker_start < end:
+                before = text[:marker_start - start]
+
+            if start < marker_end < end:
+                after = text[marker_end - start:]
+
+            if start <= marker_start and end >= marker_end:
+                replacement = before + value + after
+                self._set_text_with_preserve(text_elem, replacement)
+                inserted = True
+            elif start <= marker_start < end:
+                self._set_text_with_preserve(text_elem, before + value)
+                inserted = True
+            elif start < marker_end <= end:
+                self._set_text_with_preserve(text_elem, after)
+            else:
+                # El nodo está completamente dentro del marcador
+                self._set_text_with_preserve(text_elem, '')
+
+        if not inserted:
+            first_node = next((n for n in text_nodes if n['end'] > marker_start), None)
+            if first_node:
+                text_elem = first_node['element']
+                current_text = text_elem.text or ''
+                self._set_text_with_preserve(text_elem, current_text + value)
+
+    def _set_text_with_preserve(self, text_elem: etree.Element, new_text: str):
+        """Actualiza el texto garantizando xml:space cuando sea necesario."""
+        if new_text is None:
+            new_text = ''
+
+        text_elem.text = new_text
+
+        needs_preserve = (
+            new_text.startswith(' ') or
+            new_text.endswith(' ') or
+            '\n' in new_text or
+            '\t' in new_text
+        )
+
+        if needs_preserve:
+            text_elem.set(f'{{{self.xml_ns}}}space', 'preserve')
+        else:
+            if f'{{{self.xml_ns}}}space' in text_elem.attrib:
+                del text_elem.attrib[f'{{{self.xml_ns}}}space']
+
+    def _remove_paragraph(self, para: etree.Element):
+        """Elimina por completo un párrafo del documento."""
+        if para is None:
+            return
+
+        parent = para.getparent()
+        if parent is not None:
+            parent.remove(para)
     
     def get_document_bytes(self) -> bytes:
         """Retorna el documento como bytes."""
