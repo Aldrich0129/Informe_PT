@@ -1213,6 +1213,8 @@ class WordEngine:
                 marker_to_page[marker] = page_num
 
         # Fase 3: Actualizar el índice con los números de página
+        paragraphs_to_remove = []
+
         for entry in toc_entries:
             para = entry['paragraph']
             title = entry['title']
@@ -1221,18 +1223,16 @@ class WordEngine:
             if marker in marker_to_page:
                 page_num = marker_to_page[marker]
 
-                # Eliminar cualquier número de página existente al final
                 clean_title = re.sub(r'[\.\s]+\d+$', '', title).strip()
-
-                # Calcular el número de puntos necesarios
                 dots_length = max(3, 80 - len(clean_title) - len(str(page_num)) - 2)
                 dots = '.' * dots_length
 
-                # Actualizar el párrafo (sin el marcador)
                 para.text = f"{clean_title} {dots} {page_num}"
             else:
-                # Si no se encontró el marcador, al menos limpiar el marcador del título
-                para.text = title
+                paragraphs_to_remove.append(para)
+
+        for para in paragraphs_to_remove:
+            self._delete_paragraph(para)
 
         # Fase 4: Eliminar todos los marcadores numéricos del documento
         self._remove_numeric_markers()
@@ -1240,10 +1240,14 @@ class WordEngine:
         # Eliminar el marcador <<Indice>>
         start_para = self.doc.paragraphs[toc_start_idx]
         start_para.text = start_para.text.replace("<<Indice>>", "").strip()
+        if not start_para.text:
+            self._delete_paragraph(start_para)
 
         # Eliminar el marcador <<fin Indice>>
         end_para = self.doc.paragraphs[toc_end_idx]
         end_para.text = end_para.text.replace("<<fin Indice>>", "").strip()
+        if not end_para.text:
+            self._delete_paragraph(end_para)
 
         # Asegurar que el índice empiece en una nueva página
         if toc_start_idx > 0:
@@ -1366,6 +1370,19 @@ class WordEngine:
             for paragraph in footer.paragraphs:
                 if marker_pattern.search(paragraph.text):
                     paragraph.text = marker_pattern.sub('', paragraph.text)
+
+    def _delete_paragraph(self, paragraph):
+        """Elimina un párrafo del documento preservando el resto del contenido."""
+        if paragraph is None:
+            return
+
+        try:
+            p_element = paragraph._element
+            parent = p_element.getparent()
+            if parent is not None:
+                parent.remove(p_element)
+        except Exception:
+            pass
 
     def _has_page_break(self, run) -> bool:
         """

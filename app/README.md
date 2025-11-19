@@ -142,6 +142,8 @@ Para personalizar la aplicación:
 3. **Configurar tablas:** Edita `config/tablas.yaml`
 4. **Plantilla Word:** Actualiza `config/Plantilla.docx` con tus marcadores
 
+📚 ¿Necesitas más detalle? Consulta la guía paso a paso en [`GUIA_PERSONALIZACION_YAML.md`](GUIA_PERSONALIZACION_YAML.md) para ver ejemplos prácticos de cómo extender variables, condiciones y tablas.
+
 ## 🔍 Marcadores en la Plantilla
 
 Los marcadores siguen el formato: `<<Nombre del Marcador>>`
